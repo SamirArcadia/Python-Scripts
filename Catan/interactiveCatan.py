@@ -144,6 +144,7 @@ class hexTile:
         return set(self.neighbors).intersection(neighbor.neighbors)
     def connect(self, gameboard):
         self.gameboard = gameboard
+        self.coordText = self.gameboard.ax.text(self.center[0], self.center[1], f"({self.x},{self.y})", ha='center',va='center', fontsize=10, visible=False)
         xNeighbors = self.getNeighborAttributes('x')
         yNeighbors = self.getNeighborAttributes('y')
         if len(xNeighbors) < 6: 
@@ -244,11 +245,13 @@ class hexTile:
     def pick_resource(self, hide=False):
         self.removePaintedResource()
         self.set_resource(self.pick_fromDF(resAffinity, 'resource'), False, hide)
+        if hide: self.coordText.set_visible(True)
     def pick_number(self, hide=False):
         self.set_number(self.pick_fromDF(numAffinity, 'number'), hide)
     def reveal(self, draw=True):
         if self.gameboard.hiddenActivated and (self not in self.gameboard.hiddenRevealed) and (self.resource not in {'border','outside'}):
             self.gameboard.hiddenRevealed.add(self)
+            self.coordText.set_visible(False)
             self.set_patchParams(False, **hexColors[self.resource])
             if hasattr(self, 'token'):
                 self.token.set_visible(True)
@@ -280,8 +283,8 @@ class hexTile:
         self.on_press(event)
         
 class Catan:
-    def __init__(self, gridsize=10, gameMode='systematic', resourceRestriction='seafarers', numberRestriction=True,
-                 perturbation=0, figsize=(12,10), clipEdges=True, showCoord=False, paintedPixels=100,
+    def __init__(self, gridsize=10, gameMode='hidden', resourceRestriction='seafarers', numberRestriction=True,
+                 perturbation=0, figsize=(12,10), clipEdges=True, paintedPixels=100,
                  tokenTextSize=14, harborTextSize=8):
         self.gs, self.gp = gridsize, perturbation # store parameters
         self.matrixSize = (gridsize*2+1, gridsize*2+1)
@@ -308,7 +311,7 @@ class Catan:
         self.Neighbors = np.empty(self.matrixSize, dtype=object)
         self.tTS, self.hTS = tokenTextSize, harborTextSize
         self.currentStage = 'Define Borders' # goes in order of 'Define Borders', 'Borders Set', 'Resources Set', 'Numbers Set', 'Harbors Set'
-        self.displayGrid(figsize, clipEdges, showCoord)
+        self.displayGrid(figsize, clipEdges)
     def initiate_resImages(self, resFiles=resFiles):
         self.resImages = {}
         for resource, imageFile in resFiles.items():
@@ -331,7 +334,7 @@ class Catan:
                 self.unitResources += [resource]*amount
         else:
             self.unitResources = None
-        self.unitNumbers = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12] if self.numRestrict else None
+        self.unitNumbers = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12] if self.numRestrict else None
     def activateMotion(self, x, y):
         if not self.isClosed: 
             self.motionActivated = True
@@ -352,7 +355,7 @@ class Catan:
             self.ax.set_ylim([-bb, bb])
         self.fig.tight_layout()
         self.fig.canvas.draw()
-    def displayGrid(self, figsize, clipEdges, showCoord):
+    def displayGrid(self, figsize=(12,10), clipEdges=True):
         self.fig = plt.figure(figsize=figsize)
         self.ax = self.fig.add_subplot(111)
         self.ax.axis('off')
@@ -360,8 +363,6 @@ class Catan:
             for y in self.range:
                 self.ax.add_patch(self[x,y].patch)
                 self[x,y].connect(self)
-                if showCoord:
-                    self.ax.text(self[x,y].center[0], self[x,y].center[1], f"{x},{y}", ha='center',va='center')
         self.fig.canvas.mpl_connect('button_release_event', self.deactivateMotion)
         fitToEdge = 'edge' if not clipEdges else False
         self.zoomGrid(fitToEdge)
@@ -386,9 +387,9 @@ class Catan:
         self.deactivateMotion(None)
         for H in self[isBorder]: H.set_resource('border', False)
         self.setBorders()
+        self.hiddenActivated = True if self.gameMode == 'hidden' else False
+        self.setResources(self.hiddenActivated)
         if (self.gameMode == 'complete') or (self.gameMode == 'hidden'):
-            self.hiddenActivated = True if self.gameMode == 'hidden' else False
-            self.setResources(self.hiddenActivated)
             self.setNumbers(self.hiddenActivated)
             self.setHarbors(self.hiddenActivated)
         self.assign_buttons()
