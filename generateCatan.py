@@ -90,9 +90,9 @@ class Button:
     def __init__(self, xy, gameboard, width=0.8, height=0.6, button_type='Reset'):
         self.gameboard, self.button_type = gameboard, button_type
         offsetx, offsety = width, height
-        fcs = {'Reset':'lavender',  'Reveal All':'lightyellow', 'Redraw':'lightcyan',     'Next':'lightgreen', 'Back':'antiquewhite'}
-        ecs = {'Reset':'slategrey', 'Reveal All':'olive',       'Redraw':'lightseagreen', 'Next':'darkgreen',  'Back':'olive'}
-        tcs = {'Reset':'orangered', 'Reveal All':'y',           'Redraw':'darkcyan',      'Next':'green',      'Back':'orange'}
+        fcs = {'Reset':'lavender',  'Reveal':'lightyellow', 'Redraw':'lightcyan',     'Next':'lightgreen', 'Back':'antiquewhite'}
+        ecs = {'Reset':'slategrey', 'Reveal':'olive',       'Redraw':'lightseagreen', 'Next':'darkgreen',  'Back':'olive'}
+        tcs = {'Reset':'orangered', 'Reveal':'y',           'Redraw':'darkcyan',      'Next':'green',      'Back':'orange'}
         self.button = Rectangle(xy, offsetx, offsety, fc=fcs[button_type], ec=ecs[button_type], alpha=0.8, zorder=2)
         self.gameboard.ax.add_patch(self.button)
         self.text = self.gameboard.ax.text(xy[0]+offsetx/2, xy[1]+offsety/2, button_type, fontsize=10, color=tcs[button_type], va='center', ha='center', zorder=3)
@@ -103,7 +103,7 @@ class Button:
         if not contains: return
         if self.button_type == 'Reset':
             self.gameboard.resetBoard()
-        elif self.button_type == 'Reveal All':
+        elif self.button_type == 'Reveal':
             self.gameboard.revealAll()
         elif self.button_type == 'Redraw':
             self.gameboard.previousStage(True, False)
@@ -372,7 +372,7 @@ class Catan:
         ymax = np.max([border.center[1] for border in borders])
         self.reset_button = Button((xmax,ymax), self, width, height, 'Reset')
         if self.gameMode == 'hidden':
-            self.reveal_button = Button((xmax,ymax-1.5*height), self, width, height, 'Reveal All')
+            self.reveal_button = Button((xmax,ymax-1.5*height), self, width, height, 'Reveal')
         else:
             self.redraw_button = Button((xmax,ymax-1.5*height), self, width, height, 'Redraw')
             self.next_button = Button((xmax,ymax-3*height), self, width, height, 'Next')
