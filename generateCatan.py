@@ -291,7 +291,7 @@ class hexTile:
         self.on_press(event)
         
 class Catan:
-    def __init__(self, gridsize=10, gameMode='complete', resourceRestriction='standard', numberRestriction=True,
+    def __init__(self, gridsize=10, gameMode='hidden', resourceRestriction='seafarers', numberRestriction=True,
                  perturbation=0, figsize=(12,10), clipEdges=True, paintedPixels=100,
                  tokenTextSize=14, harborTextSize=8):
         self.gs, self.gp = gridsize, perturbation # store parameters
@@ -342,7 +342,7 @@ class Catan:
                 allowedResources.append(resource)
             self.allowedRes = sample2total(unitResources, total, allowedResources)
     def setupNumbers(self, total):
-        if self.numRestrict: self.allowedNum = sample2total([2,3,4,5,6,8,9,10,11,12], total, False)
+        if self.numRestrict: self.allowedNum = sample2total([2,3,3,4,4,5,5,6,6,8,8,9,9,10,10,11,11,12], total, False)
     def activateMotion(self, x, y):
         if not self.isClosed: 
             self.motionActivated = True
@@ -374,6 +374,11 @@ class Catan:
         self.fig.canvas.mpl_connect('button_release_event', self.deactivateMotion)
         fitToEdge = 'edge' if not clipEdges else False
         self.zoomGrid(fitToEdge)
+    def assign_resButtons(self, width=0.9, height=0.6):
+        borders = self[self.Resources=='border']
+        xmin = np.min([border.center[0] for border in borders]) - width/2
+        ymax = np.max([border.center[1] for border in borders])
+        
     def assign_buttons(self, width=0.9, height=0.6):
         borders = self[self.Resources=='border']
         xmax = np.max([border.center[0] for border in borders])
