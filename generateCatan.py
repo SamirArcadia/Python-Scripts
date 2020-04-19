@@ -16,6 +16,13 @@ from descartes import PolygonPatch
 import gc
 import time
 
+"""
+There are three gameModes accepted:
+    'complete' - Completely fills in the hexes after the border is defined using the resource and number restrictions provided.
+    'systematic' - Fill in hexes one step at a time, allowing the user to redraw as they see fit.
+    'hidden' - Hide hexes after completely filled in. The user then clicks on the hexes they with to reveal.
+"""
+
 hexColors = {None          : {'fc':'none','ec':'gray'},
              'edge'        : {'fc':'none','ec':'gray'},
              'soft border' : {'fc':'C0','ec':'k'},
@@ -74,8 +81,9 @@ def sample2total(L, total, as_list=True):
     wholeL = np.tile(L, total // len(L))
     remainderL = np.random.choice(L, total % len(L), False)
     S = list(np.concatenate((np.random.choice(wholeL, len(wholeL), False), remainderL)))
-    if as_list: return S
-    D = {u:0 for u in L}
+    if as_list == True: return S
+    unique = L if type(as_list) is bool else as_list
+    D = {u:0 for u in unique}
     for u in S: D[u] += 1
     return D
 
@@ -283,13 +291,12 @@ class hexTile:
         self.on_press(event)
         
 class Catan:
-    def __init__(self, gridsize=10, gameMode='hidden', resourceRestriction='seafarers', numberRestriction=True,
+    def __init__(self, gridsize=10, gameMode='complete', resourceRestriction='standard', numberRestriction=True,
                  perturbation=0, figsize=(12,10), clipEdges=True, paintedPixels=100,
                  tokenTextSize=14, harborTextSize=8):
         self.gs, self.gp = gridsize, perturbation # store parameters
         self.matrixSize = (gridsize*2+1, gridsize*2+1)
         self.gameMode, self.resRestrict, self.numRestrict = gameMode, resourceRestriction, numberRestriction
-        self.setupRestrictions()
         self.grid = np.empty(self.matrixSize, dtype=object) # Initialize empty gridspace
         self.Maxs, self.Mins = np.zeros((gridsize*2+1,gridsize*2+1,2), dtype=float), np.zeros((gridsize*2+1,gridsize*2+1,2), dtype=float)
         self.range = np.arange(-gridsize, gridsize+1, dtype=int)
@@ -326,15 +333,16 @@ class Catan:
         total = totalLand + totalWater
         if total == 0: return 0
         return totalWater / total
-    def setupRestrictions(self):
+    def setupResources(self, total):
         if self.resRestrict:
-            if self.resRestrict not in resRatios: raise AssertionError(f'The resource restriction paramater "{self.resRestrict}" is not understood.')
-            self.unitResources = []
+            if self.resRestrict not in resRatios: raise AssertionError(f'The resource restriction parameter "{self.resRestrict}" is not understood.')
+            unitResources, allowedResources = [], []
             for resource, amount in resRatios[self.resRestrict].items():
-                self.unitResources += [resource]*amount
-        else:
-            self.unitResources = None
-        self.unitNumbers = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12] if self.numRestrict else None
+                unitResources += [resource]*amount
+                allowedResources.append(resource)
+            self.allowedRes = sample2total(unitResources, total, allowedResources)
+    def setupNumbers(self, total):
+        if self.numRestrict: self.allowedNum = sample2total([2,3,4,5,6,8,9,10,11,12], total, False)
     def activateMotion(self, x, y):
         if not self.isClosed: 
             self.motionActivated = True
@@ -411,14 +419,14 @@ class Catan:
         self.numAffinityByRes = pd.DataFrame(np.zeros((len(numAffinity),6),dtype=int),columns=resAffinity.columns[4:],index=numAffinity.index)
         self.gameTiles = (self.Resources!='outside')*(self.Resources!='border')
         gameTiles = self[self.gameTiles]
-        if self.resRestrict: self.allowedRes = sample2total(self.unitResources, len(gameTiles), False)
+        self.setupResources(len(gameTiles))
         for H in np.random.choice(gameTiles, len(gameTiles), False): H.pick_resource(hide)
         self.currentStage = 'Resources Set'
     def setNumbers(self, hide=False):
         if self.currentStage != 'Resources Set': raise AssertionError("Numbers cannot be set in current state")
         self.numberableTiles = self.gameTiles * (self.Numbers==None)
         numberableTiles = self[self.numberableTiles]
-        if self.numRestrict: self.allowedNum = sample2total(self.unitNumbers, len(numberableTiles), False)
+        self.setupNumbers(len(numberableTiles))
         for H in np.random.choice(numberableTiles, len(numberableTiles), False): H.pick_number(hide)
         self.currentStage = 'Numbers Set'
     def removeNumbers(self):
