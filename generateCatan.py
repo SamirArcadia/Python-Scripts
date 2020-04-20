@@ -42,13 +42,13 @@ resRatios = {'standard' : {'water':0, 'desert':1, 'gold':0, 'brick':3, 'ore':3, 
              'seafarers' : {'water':20,'desert':1, 'gold':2, 'brick':4, 'ore':4, 'wood':4, 'wheat':4, 'sheep':5}}
 
 resAffinity = pd.DataFrame([[ 8,  1, 30, -4,  3,  0,  0,  0,  0,  0],
-                            [-2, -4, -6, -6,  0, -1, -1, -1, -1, -1],
-                            [-2,  1,  0, -1, -9, -4, -4, -4, -4, -4],
-                            [ 1,  0,  0,  0, -2, -4,  0,  0,  0,  0],
-                            [ 1,  0,  0,  0, -2,  0, -4,  0,  0,  0],
-                            [ 1,  0,  0,  0, -2,  0,  0, -4,  0,  0],
-                            [ 1,  0,  0,  0, -2,  0,  0,  0, -4,  0],
-                            [ 1,  0,  0,  0, -2,  0,  0,  0,  0, -4]],
+                            [-2, -4, -6, -8,  0, -1, -1, -1, -1, -1],
+                            [-2,  1,  0, -1,-12, -4, -4, -4, -4, -4],
+                            [ 1,  0,  0,  0, -2, -6,  0,  0,  0,  0],
+                            [ 1,  0,  0,  0, -2,  0, -6,  0,  0,  0],
+                            [ 1,  0,  0,  0, -2,  0,  0, -6,  0,  0],
+                            [ 1,  0,  0,  0, -2,  0,  0,  0, -6,  0],
+                            [ 1,  0,  0,  0, -2,  0,  0,  0,  0, -6]],
                 index=['water','desert','gold','brick','ore','wood','wheat','sheep'],
                 columns=[None, 'border','water','desert','gold','brick','ore','wood','wheat','sheep'])
 
@@ -120,6 +120,11 @@ class Button:
             self.gameboard.nextStage()
         elif self.button_type == 'Back':
             self.gameboard.previousStage()
+            
+class RadioButton:
+    def __init__(self, xy, gameboard, button_names, width=0.8, height=0.6, dy=-1.5, dx=0):
+        self.gameboard, self.buttons = gameboard, []
+        self.active = None
 
 class hexTile:
     def __init__(self, x=0, y=0, perturbation=0):
@@ -291,7 +296,7 @@ class hexTile:
         self.on_press(event)
         
 class Catan:
-    def __init__(self, gridsize=10, gameMode='hidden', resourceRestriction='seafarers', numberRestriction=True,
+    def __init__(self, gridsize=10, gameMode='complete', resourceRestriction='seafarers', numberRestriction=True,
                  perturbation=0, figsize=(12,10), clipEdges=True, paintedPixels=100,
                  tokenTextSize=14, harborTextSize=8):
         self.gs, self.gp = gridsize, perturbation # store parameters
@@ -378,7 +383,6 @@ class Catan:
         borders = self[self.Resources=='border']
         xmin = np.min([border.center[0] for border in borders]) - width/2
         ymax = np.max([border.center[1] for border in borders])
-        
     def assign_buttons(self, width=0.9, height=0.6):
         borders = self[self.Resources=='border']
         xmax = np.max([border.center[0] for border in borders])
@@ -470,10 +474,10 @@ class Catan:
         self.setNumbers()
         self.setHarbors()
         self.fig.canvas.draw()
-    def revealAll(self):
+    def revealAll(self, draw=True):
         if self.currentStage != 'Harbors Set': raise AssertionError("Gameboard appears incomplete")
         for H in self[self.gameTiles]: H.reveal(draw=False)
-        self.fig.canvas.draw()
+        if draw: self.fig.canvas.draw()
     def nextStage(self, draw=True):
         if self.currentStage == 'Define Borders':
             print("Define borders before continuing!")
