@@ -55,16 +55,16 @@ resAffinity = pd.DataFrame([[ 8,  1, 30, -4,  3,  0,  0,  0,  0,  0],
 resFiles = {'brick':'images\\brick.jpg','desert':'images\\desert.JPG','gold':'images\\gold.JPG','ore':'images\\ore.jpg',
             'sheep':'images\\sheep.jpg','water':'images\\water.JPG','wheat':'images\\wheat.jpg','wood':'images\\wood.JPG'}
 
-numAffinity = pd.DataFrame([[ 0,  0, -4,  1,  2,  3,  4,  4,  3,  2,  1,  0],
-                            [ 1,  1,  1, -4,  1,  2,  3,  3,  2,  1,  0,  1],
-                            [ 2,  2,  2,  1, -4,  1,  2,  2,  1,  0,  1,  2],
-                            [ 3,  1,  3,  2,  1, -4,  1,  1,  0,  1,  2,  3],
-                            [ 4,  0,  4,  3,  2,  1, -4,  0,  1,  2,  3,  4],
-                            [ 4,  0,  4,  3,  2,  1,  0, -4,  1,  2,  3,  4],
-                            [ 3,  1,  3,  2,  1,  0,  1,  1, -4,  1,  2,  3],
-                            [ 2,  2,  2,  1,  0,  1,  2,  2,  1, -4,  1,  2],
-                            [ 1,  1,  1,  0,  1,  2,  3,  3,  2,  1, -4,  1],
-                            [ 0,  0,  0,  1,  2,  3,  4,  4,  3,  2,  1, -4]],
+numAffinity = pd.DataFrame([[ 0,  0, -4,  1,  4,  9, 16, 16,  9,  4,  1,  0],
+                            [ 1,  1,  1, -4,  1,  4,  9,  9,  4,  1,  0,  1],
+                            [ 4,  4,  4,  1, -4,  1,  4,  4,  1,  0,  1,  4],
+                            [ 9,  1,  9,  4,  1, -4,  1,  1,  0,  1,  4,  9],
+                            [16,  0, 16,  9,  4,  1, -4,  0,  1,  4,  9, 16],
+                            [16,  0, 16,  9,  4,  1,  0, -4,  1,  4,  9, 16],
+                            [ 9,  1,  9,  4,  1,  0,  1,  1, -4,  1,  4,  9],
+                            [ 4,  4,  4,  1,  0,  1,  4,  4,  1, -4,  1,  4],
+                            [ 1,  1,  1,  0,  1,  4,  9,  9,  4,  1, -4,  1],
+                            [ 0,  0,  0,  1,  4,  9, 16, 16,  9,  4,  1, -4]],
                 index=[2, 3, 4, 5, 6, 8, 9, 10, 11, 12],
                 columns=[0, None, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12])
 
@@ -88,10 +88,8 @@ def sample2total(L, total, as_list=True):
     return D
 
 def rand_from_cdf(cdf):
-    randomNumber = np.random.randint(1, cdf.tail(1)+1)
-    chosenIndex = 0
-    while randomNumber > cdf.iloc[chosenIndex]:
-        chosenIndex += 1
+    randomNumber, chosenIndex = np.random.randint(1, np.max(cdf)+1), 0
+    while randomNumber > cdf.iloc[chosenIndex]: chosenIndex += 1
     return cdf.index[chosenIndex]
 
 class Button:
@@ -244,8 +242,9 @@ class hexTile:
         pdf = np.zeros((len(DF),),dtype=int)
         for H in self.neighbors: pdf += DF[getattr(H, attr)] # gets pdf
         if attr == 'number': pdf += self.gameboard.numAffinityByRes[self.resource] # Also take into account how prevelent the resource is
-        pdf += (1 - np.min(pdf))
-        cdf = pdf.cumsum()
+        shiftedpdf = pdf + (1 - np.min(pdf))
+        cdf = shiftedpdf.cumsum()
+        if self.gameboard.negForbids and not np.all(pdf < 0): cdf[pdf < 0] = 0 # This means negative pdf value forbids affinity
         choice = rand_from_cdf(cdf)
         if ((attr=='number') and (not self.gameboard.numRestrict)) or ((attr=='resource') and (not self.gameboard.resRestrict)): return choice
         if attr=='number':
@@ -296,10 +295,11 @@ class hexTile:
         self.on_press(event)
         
 class Catan:
-    def __init__(self, gridsize=10, gameMode='complete', resourceRestriction='seafarers', numberRestriction=True,
-                 perturbation=0, figsize=(12,10), clipEdges=True, paintedPixels=100,
+    def __init__(self, gridsize=10, gameMode='systematic', resourceRestriction='seafarers', numberRestriction=True,
+                 perturbation=0, figsize=(12,10), clipEdges=True, paintedPixels=100, negativeForbids=False,
                  tokenTextSize=14, harborTextSize=8):
         self.gs, self.gp = gridsize, perturbation # store parameters
+        self.negForbids = negativeForbids
         self.matrixSize = (gridsize*2+1, gridsize*2+1)
         self.gameMode, self.resRestrict, self.numRestrict = gameMode, resourceRestriction, numberRestriction
         self.grid = np.empty(self.matrixSize, dtype=object) # Initialize empty gridspace
