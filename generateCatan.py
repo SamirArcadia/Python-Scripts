@@ -309,7 +309,7 @@ class hexTile:
         self.on_press(event)
         
 class Catan:
-    def __init__(self, gridsize=10, gameMode='systematic', resourceRestriction='seafarers', numberRestriction=True,
+    def __init__(self, gridsize=10, gameMode='complete', resourceRestriction='seafarers', numberRestriction=True,
                  perturbation=0, figsize=(12,10), clipEdges=True, paintedPixels=100, negativeForbids=False,
                  tokenTextSize=14, harborTextSize=8):
         self.gs, self.gp = gridsize, perturbation # store parameters
@@ -331,6 +331,8 @@ class Catan:
         self.motionTouched = np.zeros(self.matrixSize, dtype=bool)
         self.hiddenActivated = False
         self.hiddenRevealed = set()
+        self.buttons_assigned = False
+        self.radioButtons_assigned = False
         self.Resources = np.empty(self.matrixSize, dtype=object)
         self.Numbers = np.empty(self.matrixSize, dtype=object)
         self.TilesWithHarbor = []
@@ -402,6 +404,7 @@ class Catan:
         restrictions = [key for key in resRatios] + ['None']
         self.resButtons = RadioButton((xmin,ymax), self, restrictions)
     def assign_buttons(self, width=0.9, height=0.6):
+        self.buttons_assigned = True
         borders = self[self.Resources=='border']
         xmax = np.max([border.center[0] for border in borders])
         ymax = np.max([border.center[1] for border in borders])
@@ -423,11 +426,10 @@ class Catan:
         for H in self[isBorder]: H.set_resource('border', False)
         self.setBorders()
         self.hiddenActivated = True if self.gameMode == 'hidden' else False
-        self.setResources(self.hiddenActivated)
         if (self.gameMode == 'complete') or (self.gameMode == 'hidden'):
+            self.setResources(self.hiddenActivated)
             self.setNumbers(self.hiddenActivated)
             self.setHarbors(self.hiddenActivated)
-        self.assign_buttons()
         self.fig.canvas.draw()
     def setBorders(self):
         outsideSet = list(self[self.Resources == 'edge'])
@@ -444,6 +446,7 @@ class Catan:
         if self.gameMode == 'systematic': self.assign_resButtons()
     def setResources(self, hide=False):
         if self.currentStage not in {'Resources Set', 'Borders Set'}: raise AssertionError("Resources cannot be set in current state")
+        if not self.buttons_assigned: self.assign_buttons()
         self.numAffinityByRes = pd.DataFrame(np.zeros((len(numAffinity),6),dtype=int),columns=resAffinity.columns[4:],index=numAffinity.index)
         self.gameTiles = (self.Resources!='outside')*(self.Resources!='border')
         gameTiles = self[self.gameTiles]
@@ -529,8 +532,8 @@ class Catan:
             self.currentStage = 'Borders Set'
         if draw: self.fig.canvas.draw()
     def redrawStage(self, draw=True):
-        self.gameboard.previousStage(True, False)
-        self.gameboard.nextStage(draw)
+        self.previousStage(True, False)
+        self.nextStage(draw)
     def paintBoard(self):
         start = time.time()
         for H in self[self.gameTiles]: H.paintResource()
