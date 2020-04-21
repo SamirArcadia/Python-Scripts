@@ -295,7 +295,7 @@ class hexTile:
         self.on_press(event)
         
 class Catan:
-    def __init__(self, gridsize=10, gameMode='systematic', resourceRestriction='seafarers', numberRestriction=True,
+    def __init__(self, gridsize=10, gameMode='hidden', resourceRestriction='seafarers', numberRestriction=True,
                  perturbation=0, figsize=(12,10), clipEdges=True, paintedPixels=100, negativeForbids=False,
                  tokenTextSize=14, harborTextSize=8):
         self.gs, self.gp = gridsize, perturbation # store parameters
@@ -338,7 +338,7 @@ class Catan:
         total = totalLand + totalWater
         if total == 0: return 0
         return totalWater / total
-    def setupResources(self, total):
+    def setupResourceLimit(self, total):
         if self.resRestrict:
             if self.resRestrict not in resRatios: raise AssertionError(f'The resource restriction parameter "{self.resRestrict}" is not understood.')
             unitResources, allowedResources = [], []
@@ -346,7 +346,7 @@ class Catan:
                 unitResources += [resource]*amount
                 allowedResources.append(resource)
             self.allowedRes = sample2total(unitResources, total, allowedResources)
-    def setupNumbers(self, total):
+    def setupNumberLimit(self, total):
         if self.numRestrict: self.allowedNum = sample2total([2,3,3,4,4,5,5,6,6,8,8,9,9,10,10,11,11,12], total, False)
     def activateMotion(self, x, y):
         if not self.isClosed: 
@@ -428,14 +428,18 @@ class Catan:
         self.numAffinityByRes = pd.DataFrame(np.zeros((len(numAffinity),6),dtype=int),columns=resAffinity.columns[4:],index=numAffinity.index)
         self.gameTiles = (self.Resources!='outside')*(self.Resources!='border')
         gameTiles = self[self.gameTiles]
-        self.setupResources(len(gameTiles))
+        self.setupResourceLimit(len(gameTiles))
         for H in np.random.choice(gameTiles, len(gameTiles), False): H.pick_resource(hide)
         self.currentStage = 'Resources Set'
+    def removeResources(self):
+        if self.currentStage != 'Resources Set': raise AssertionError("Resources cannot be removed in current state")
+        for H in self[self.gameTiles]: H.set_resource(None, False)
+        self.currentStage = 'Borders Set'
     def setNumbers(self, hide=False):
         if self.currentStage != 'Resources Set': raise AssertionError("Numbers cannot be set in current state")
         self.numberableTiles = self.gameTiles * (self.Numbers==None)
         numberableTiles = self[self.numberableTiles]
-        self.setupNumbers(len(numberableTiles))
+        self.setupNumberLimit(len(numberableTiles))
         for H in np.random.choice(numberableTiles, len(numberableTiles), False): H.pick_number(hide)
         self.currentStage = 'Numbers Set'
     def removeNumbers(self):
@@ -470,6 +474,7 @@ class Catan:
     def resetBoard(self):
         self.removeHarbors()
         self.removeNumbers()
+        self.removeResources()
         self.setResources()
         self.setNumbers()
         self.setHarbors()
