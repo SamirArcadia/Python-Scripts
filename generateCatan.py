@@ -219,8 +219,12 @@ class hexTile:
     def remove_number(self):
         self.number = None
         self.gameboard.Numbers[self.x, self.y] = None
-        if hasattr(self, 'token'): self.token.remove()
-        if hasattr(self, 'tokenNumber'): self.tokenNumber.remove()
+        if hasattr(self, 'token'): 
+            self.token.remove()
+            delattr(self, 'token')
+        if hasattr(self, 'tokenNumber'): 
+            self.tokenNumber.remove()
+            delattr(self, 'tokenNumber')
     def set_harbor(self, harbor, neighbor, hide=False):
         self.harbor = harbor
         self.harborFaces = neighbor
@@ -446,6 +450,7 @@ class Catan:
         if self.currentStage != 'Numbers Set': raise AssertionError("Numbers cannot be removed in current state")
         numberableTiles = self[self.numberableTiles]
         for H in numberableTiles: H.remove_number()
+        self.hiddenRevealed = set()
         self.currentStage = 'Resources Set'
     def setHarbors(self, hide=False):
         if self.currentStage != 'Numbers Set': raise AssertionError("Harbors cannot be set in current state")
@@ -469,15 +474,18 @@ class Catan:
             H = self.TilesWithHarbor.pop()
             H.harborPatch.remove()
             H.harborPatchText.remove()
-            H.harbor, H.harborFaces = None, None
+            H.harborFaces.facedByHarbor = set()
+            H.harbor, H.harborFaces, H.facedByHarbor = None, None, set()
+            delattr(H, 'harborPatch')
+            delattr(H, 'harborPatchText')
         self.currentStage = 'Numbers Set'
     def resetBoard(self):
         self.removeHarbors()
         self.removeNumbers()
         self.removeResources()
-        self.setResources()
-        self.setNumbers()
-        self.setHarbors()
+        self.setResources(self.hiddenActivated)
+        self.setNumbers(self.hiddenActivated)
+        self.setHarbors(self.hiddenActivated)
         self.fig.canvas.draw()
     def revealAll(self, draw=True):
         if self.currentStage != 'Harbors Set': raise AssertionError("Gameboard appears incomplete")
