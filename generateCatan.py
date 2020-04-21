@@ -55,16 +55,16 @@ resAffinity = pd.DataFrame([[ 8,  1, 30, -4,  3,  0,  0,  0,  0,  0],
 resFiles = {'brick':'images\\brick.jpg','desert':'images\\desert.JPG','gold':'images\\gold.JPG','ore':'images\\ore.jpg',
             'sheep':'images\\sheep.jpg','water':'images\\water.JPG','wheat':'images\\wheat.jpg','wood':'images\\wood.JPG'}
 
-numAffinity = pd.DataFrame([[ 0,  0, -4,  1,  4,  9, 16, 16,  9,  4,  1,  0],
-                            [ 1,  1,  1, -4,  1,  4,  9,  9,  4,  1,  0,  1],
-                            [ 4,  4,  4,  1, -4,  1,  4,  4,  1,  0,  1,  4],
-                            [ 9,  1,  9,  4,  1, -4,  1,  1,  0,  1,  4,  9],
-                            [16,  0, 16,  9,  4,  1, -4,  0,  1,  4,  9, 16],
-                            [16,  0, 16,  9,  4,  1,  0, -4,  1,  4,  9, 16],
-                            [ 9,  1,  9,  4,  1,  0,  1,  1, -4,  1,  4,  9],
-                            [ 4,  4,  4,  1,  0,  1,  4,  4,  1, -4,  1,  4],
-                            [ 1,  1,  1,  0,  1,  4,  9,  9,  4,  1, -4,  1],
-                            [ 0,  0,  0,  1,  4,  9, 16, 16,  9,  4,  1, -4]],
+numAffinity = pd.DataFrame([[ 0,  0, -9,  1,  4,  9, 16, 16,  9,  4,  1,  0],
+                            [ 1,  1,  1, -9,  1,  4,  9,  9,  4,  1,  0,  1],
+                            [ 4,  4,  4,  1, -9,  1,  4,  4,  1,  0,  1,  4],
+                            [ 9,  1,  9,  4,  1, -9,  1,  1,  0,  1,  4,  9],
+                            [16,  0, 16,  9,  4,  1, -9,  0,  1,  4,  9, 16],
+                            [16,  0, 16,  9,  4,  1,  0, -9,  1,  4,  9, 16],
+                            [ 9,  1,  9,  4,  1,  0,  1,  1, -9,  1,  4,  9],
+                            [ 4,  4,  4,  1,  0,  1,  4,  4,  1, -9,  1,  4],
+                            [ 1,  1,  1,  0,  1,  4,  9,  9,  4,  1, -9,  1],
+                            [ 0,  0,  0,  1,  4,  9, 16, 16,  9,  4,  1, -9]],
                 index=[2, 3, 4, 5, 6, 8, 9, 10, 11, 12],
                 columns=[0, None, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12])
 
@@ -93,36 +93,46 @@ def rand_from_cdf(cdf):
     return cdf.index[chosenIndex]
 
 class Button:
-    def __init__(self, xy, gameboard, width=0.8, height=0.6, button_type='Reset'):
-        self.gameboard, self.button_type = gameboard, button_type
+    def __init__(self, xy, gameboard, name, func, width=0.8, height=0.6, radio=False):
+        self.gameboard = gameboard
+        fcs = {'Reset':'lavender',  'Reveal':'lightyellow', 'Redraw':'lightcyan',     'Next':'lightgreen', 'Back':'antiquewhite', 'Radio':'lavender'}
+        ecs = {'Reset':'slategrey', 'Reveal':'olive',       'Redraw':'lightseagreen', 'Next':'darkgreen',  'Back':'olive',        'Radio':'none'}
+        tcs = {'Reset':'orangered', 'Reveal':'y',           'Redraw':'darkcyan',      'Next':'green',      'Back':'orange',       'Radio':'orange'}
+        self.button_type = 'Radio' if radio else name
+        if self.button_type not in fcs: self.button_type = 'Reset' # If an invalid name is entered then default to Reset.
+        self.button_func = func
+        self.active = False
         offsetx, offsety = width, height
-        fcs = {'Reset':'lavender',  'Reveal':'lightyellow', 'Redraw':'lightcyan',     'Next':'lightgreen', 'Back':'antiquewhite'}
-        ecs = {'Reset':'slategrey', 'Reveal':'olive',       'Redraw':'lightseagreen', 'Next':'darkgreen',  'Back':'olive'}
-        tcs = {'Reset':'orangered', 'Reveal':'y',           'Redraw':'darkcyan',      'Next':'green',      'Back':'orange'}
-        self.button = Rectangle(xy, offsetx, offsety, fc=fcs[button_type], ec=ecs[button_type], alpha=0.8, zorder=2)
+        self.button = Rectangle(xy, offsetx, offsety, fc=fcs[self.button_type], ec=ecs[self.button_type], alpha=0.8, zorder=2)
         self.gameboard.ax.add_patch(self.button)
-        self.text = self.gameboard.ax.text(xy[0]+offsetx/2, xy[1]+offsety/2, button_type, fontsize=10, color=tcs[button_type], va='center', ha='center', zorder=3)
+        self.text = self.gameboard.ax.text(xy[0]+offsetx/2, xy[1]+offsety/2, name, fontsize=10, color=tcs[self.button_type], va='center', ha='center', zorder=3)
         self.cidpress = self.button.figure.canvas.mpl_connect('button_press_event', self.on_press)
+        if self.button_type == 'Radio':
+            self.cidmove = self.button.figure.canvas.mpl_connect('motion_notify_event', self.on_move)
     def on_press(self, event):
         if event.inaxes != self.button.axes: return
         contains, attrd = self.button.contains(event)
         if not contains: return
-        if self.button_type == 'Reset':
-            self.gameboard.resetBoard()
-        elif self.button_type == 'Reveal':
-            self.gameboard.revealAll()
-        elif self.button_type == 'Redraw':
-            self.gameboard.previousStage(True, False)
-            self.gameboard.nextStage()
-        elif self.button_type == 'Next':
-            self.gameboard.nextStage()
-        elif self.button_type == 'Back':
-            self.gameboard.previousStage()
-            
+        self.button_func()
+    def on_move(self, event):
+        if event.inaxes != self.button.axes: return
+        contains, attrd = self.button.contains(event)
+        if contains and (not self.active):
+            self.button.set_edgecolor('orange')
+            self.button.set_lw(2)
+            self.active = True
+            self.button.figure.canvas.draw()
+        elif (not contains) and self.active: 
+            self.button.set_edgecolor('none')
+            self.active = False
+            self.button.figure.canvas.draw()
+
 class RadioButton:
-    def __init__(self, xy, gameboard, button_names, width=0.8, height=0.6, dy=-1.5, dx=0):
+    def __init__(self, xy, gameboard, button_names, width=0.8, height=0.6, dy=-0.8, dx=0):
         self.gameboard, self.buttons = gameboard, []
-        self.active = None
+        for i in range(len(button_names)):
+            func = lambda: self.gameboard.set_resRestrict(False) if button_names[i]=='None' else self.gameboard.set_resRestrict(button_names[i])
+            self.buttons.append(Button((xy[0]+i*dx, xy[1]+i*dy), gameboard, button_names[i], func, width, height, True))
 
 class hexTile:
     def __init__(self, x=0, y=0, perturbation=0):
@@ -299,7 +309,7 @@ class hexTile:
         self.on_press(event)
         
 class Catan:
-    def __init__(self, gridsize=10, gameMode='hidden', resourceRestriction='seafarers', numberRestriction=True,
+    def __init__(self, gridsize=10, gameMode='systematic', resourceRestriction='seafarers', numberRestriction=True,
                  perturbation=0, figsize=(12,10), clipEdges=True, paintedPixels=100, negativeForbids=False,
                  tokenTextSize=14, harborTextSize=8):
         self.gs, self.gp = gridsize, perturbation # store parameters
@@ -342,6 +352,8 @@ class Catan:
         total = totalLand + totalWater
         if total == 0: return 0
         return totalWater / total
+    def set_resRestrict(self, resourceRestriction):
+        self.resRestrict = resourceRestriction
     def setupResourceLimit(self, total):
         if self.resRestrict:
             if self.resRestrict not in resRatios: raise AssertionError(f'The resource restriction parameter "{self.resRestrict}" is not understood.')
@@ -387,17 +399,19 @@ class Catan:
         borders = self[self.Resources=='border']
         xmin = np.min([border.center[0] for border in borders]) - width/2
         ymax = np.max([border.center[1] for border in borders])
+        restrictions = [key for key in resRatios] + ['None']
+        self.resButtons = RadioButton((xmin,ymax), self, restrictions)
     def assign_buttons(self, width=0.9, height=0.6):
         borders = self[self.Resources=='border']
         xmax = np.max([border.center[0] for border in borders])
         ymax = np.max([border.center[1] for border in borders])
-        self.reset_button = Button((xmax,ymax), self, width, height, 'Reset')
+        self.reset_button = Button((xmax,ymax), self, 'Reset', self.resetBoard, width, height)
         if self.gameMode == 'hidden':
-            self.reveal_button = Button((xmax,ymax-1.5*height), self, width, height, 'Reveal')
+            self.reveal_button = Button((xmax,ymax-1.5*height), self, 'Reveal', self.revealAll, width, height)
         else:
-            self.redraw_button = Button((xmax,ymax-1.5*height), self, width, height, 'Redraw')
-            self.next_button = Button((xmax,ymax-3*height), self, width, height, 'Next')
-            self.back_button = Button((xmax,ymax-4.5*height), self, width, height, 'Back')
+            self.redraw_button = Button((xmax,ymax-1.5*height), self, 'Redraw', self.redrawStage, width, height)
+            self.next_button = Button((xmax,ymax-3*height), self, 'Next', self.nextStage, width, height)
+            self.back_button = Button((xmax,ymax-4.5*height), self, 'Back', self.previousStage, width, height)
     def update_isClosed(self):
         self.isClosed = False
         isBorder = self.Resources == 'soft border'
@@ -427,6 +441,7 @@ class Catan:
                     outsideSet.append(neighbor)
         self.currentStage = 'Borders Set'
         self.zoomGrid('border')
+        if self.gameMode == 'systematic': self.assign_resButtons()
     def setResources(self, hide=False):
         if self.currentStage not in {'Resources Set', 'Borders Set'}: raise AssertionError("Resources cannot be set in current state")
         self.numAffinityByRes = pd.DataFrame(np.zeros((len(numAffinity),6),dtype=int),columns=resAffinity.columns[4:],index=numAffinity.index)
@@ -513,6 +528,9 @@ class Catan:
         elif (self.currentStage == 'Resources Set') and ignoreResourcesSet:
             self.currentStage = 'Borders Set'
         if draw: self.fig.canvas.draw()
+    def redrawStage(self, draw=True):
+        self.gameboard.previousStage(True, False)
+        self.gameboard.nextStage(draw)
     def paintBoard(self):
         start = time.time()
         for H in self[self.gameTiles]: H.paintResource()
