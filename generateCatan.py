@@ -44,11 +44,11 @@ resRatios = {'standard' : {'water':0, 'desert':1, 'gold':0, 'brick':3, 'ore':3, 
 resAffinity = pd.DataFrame([[ 8,  1, 30,-99,  3,  0,  0,  0,  0,  0],
                             [-2, -4,-99, -8,  0, -1, -1, -1, -1, -1],
                             [-2,  1,  0, -1,-12, -4, -4, -4, -4, -4],
-                            [ 1,  0,  0,  0, -2,-99,  0,  0,  0,  0],
-                            [ 1,  0,  0,  0, -2,  0,-99,  0,  0,  0],
-                            [ 1,  0,  0,  0, -2,  0,  0,-99,  0,  0],
-                            [ 1,  0,  0,  0, -2,  0,  0,  0,-99,  0],
-                            [ 1,  0,  0,  0, -2,  0,  0,  0,  0,-99]],
+                            [ 1,  0,  0,  0, -2,-99,  3,  3,  3,  3],
+                            [ 1,  0,  0,  0, -2,  3,-99,  3,  3,  3],
+                            [ 1,  0,  0,  0, -2,  3,  3,-99,  3,  3],
+                            [ 1,  0,  0,  0, -2,  3,  3,  3,-99,  3],
+                            [ 1,  0,  0,  0, -2,  3,  3,  3,  3,-99]],
                 index=['water','desert','gold','brick','ore','wood','wheat','sheep'],
                 columns=[None, 'border','water','desert','gold','brick','ore','wood','wheat','sheep'])
 
@@ -201,7 +201,6 @@ class hexTile:
             for j in range(len(yrange)-1):
                 b = box(xrange[i], yrange[j], xrange[i+1], yrange[j+1])
                 I = self.polygon.intersection(b)
-                #I = b if self.polygon.contains(b) else self.polygon.intersection(b)
                 if I.area > 0:
                     color = '#%02x%02x%02x' % img[i, j] # Image Indexing Transform: [j, len(xrange)-2-i], although it looks like PIL accounts for it.
                     self.addPixelPaint(PolygonPatch(I, fc=color, ec=color, lw=0.05, zorder=1))
@@ -311,13 +310,13 @@ class hexTile:
         self.on_press(event)
         
 class Catan:
-    def __init__(self, gridsize=10, gameMode='systematic', resourceRestriction='seafarers', numberRestriction=True,
+    def __init__(self, gridsize=10, gameMode='systematic', resAlgorithm='affinityMatrix', numberRestriction=True,
                  perturbation=0, figsize=(12,10), clipEdges=True, paintedPixels=100, negativeForbids=False,
                  tokenTextSize=14, harborTextSize=8):
         self.gs, self.gp = gridsize, perturbation # store parameters
         self.negForbids = negativeForbids
         self.matrixSize = (gridsize*2+1, gridsize*2+1)
-        self.gameMode, self.resRestrict, self.numRestrict = gameMode, resourceRestriction, numberRestriction
+        self.gameMode, self.resAlgorithm, self.resRestrict, self.numRestrict = gameMode, resAlgorithm, None, numberRestriction
         self.grid = np.empty(self.matrixSize, dtype=object) # Initialize empty gridspace
         self.Maxs, self.Mins = np.zeros((gridsize*2+1,gridsize*2+1,2), dtype=float), np.zeros((gridsize*2+1,gridsize*2+1,2), dtype=float)
         self.range = np.arange(-gridsize, gridsize+1, dtype=int)
@@ -454,6 +453,8 @@ class Catan:
         self.currentStage = 'Borders Set'
         self.zoomGrid('border')
         if self.gameMode == 'systematic': self.assign_resButtons()
+    def clusterMethod(self, gameTiles):
+        landClusters = len(gameTiles) / 15 # use this as an approximate number of land clusters to place on board.
     def setResources(self, hide=False):
         if self.currentStage not in {'Resources Set', 'Borders Set'}: raise AssertionError("Resources cannot be set in current state")
         self.close_resButtons()
@@ -462,7 +463,7 @@ class Catan:
         self.gameTiles = (self.Resources!='outside')*(self.Resources!='border')
         gameTiles = self[self.gameTiles]
         self.setupResourceLimit(len(gameTiles))
-        for H in np.random.choice(gameTiles, len(gameTiles), False): H.pick_resource(hide)
+        for H in np.random.choice(gameTiles, len(gameTiles), False): H.pick_resource(hide) # matrixAffinity algorithm
         self.currentStage = 'Resources Set'
     def removeResources(self):
         if self.currentStage != 'Resources Set': raise AssertionError("Resources cannot be removed in current state")
