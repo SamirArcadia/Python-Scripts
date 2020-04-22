@@ -41,14 +41,14 @@ resRatios = {'standard' : {'water':0, 'desert':1, 'gold':0, 'brick':3, 'ore':3, 
              'pangea'   : {'water':0, 'desert':0, 'gold':1, 'brick':3, 'ore':3, 'wood':4, 'wheat':4, 'sheep':4},
              'seafarers' : {'water':20,'desert':1, 'gold':2, 'brick':4, 'ore':4, 'wood':4, 'wheat':4, 'sheep':5}}
 
-resAffinity = pd.DataFrame([[ 8,  1, 30,-99,  3,  0,  0,  0,  0,  0],
-                            [-2, -4,-99, -8,  0, -1, -1, -1, -1, -1],
-                            [-2,  1,  0, -1,-12, -4, -4, -4, -4, -4],
-                            [ 1,  0,  0,  0, -2,-99,  3,  3,  3,  3],
-                            [ 1,  0,  0,  0, -2,  3,-99,  3,  3,  3],
-                            [ 1,  0,  0,  0, -2,  3,  3,-99,  3,  3],
-                            [ 1,  0,  0,  0, -2,  3,  3,  3,-99,  3],
-                            [ 1,  0,  0,  0, -2,  3,  3,  3,  3,-99]],
+resAffinity = pd.DataFrame([[ 8,  1, 30, -4,  3,  0,  0,  0,  0,  0],
+                            [-2, -4, -4, -8,  0, -1, -1, -1, -1, -1],
+                            [-2,  1,  0, -1,-12, -8, -8, -8, -8, -8],
+                            [ 1,  0,  0,  0, -2,-99,  0,  0,  0,  0],
+                            [ 1,  0,  0,  0, -2,  0,-99,  0,  0,  0],
+                            [ 1,  0,  0,  0, -2,  0,  0,-99,  0,  0],
+                            [ 1,  0,  0,  0, -2,  0,  0,  0,-99,  0],
+                            [ 1,  0,  0,  0, -2,  0,  0,  0,  0,-99]],
                 index=['water','desert','gold','brick','ore','wood','wheat','sheep'],
                 columns=[None, 'border','water','desert','gold','brick','ore','wood','wheat','sheep'])
 
@@ -454,6 +454,7 @@ class Catan:
         self.zoomGrid('border')
         if self.gameMode == 'systematic': self.assign_resButtons()
     def clusterMethod(self, gameTiles):
+        # This is a stub, please edit.
         landClusters = len(gameTiles) / 15 # use this as an approximate number of land clusters to place on board.
     def setResources(self, hide=False):
         if self.currentStage not in {'Resources Set', 'Borders Set'}: raise AssertionError("Resources cannot be set in current state")
@@ -468,6 +469,9 @@ class Catan:
     def removeResources(self):
         if self.currentStage != 'Resources Set': raise AssertionError("Resources cannot be removed in current state")
         for H in self[self.gameTiles]: H.set_resource(None, False)
+        self.close_buttons()
+        self.buttons_assigned = False
+        self.assign_resButtons()
         self.currentStage = 'Borders Set'
     def setNumbers(self, hide=False):
         if self.currentStage != 'Resources Set': raise AssertionError("Numbers cannot be set in current state")
@@ -532,16 +536,18 @@ class Catan:
         nextByStage[self.currentStage]()
         if draw: self.fig.canvas.draw()
     def previousStage(self, ignoreResourcesSet=False, draw=True):
-        badInput = {'Define Borders', 'Borders Set'} if ignoreResourcesSet else {'Define Borders', 'Borders Set', 'Resources Set'}
-        if self.currentStage in badInput:
+        if self.currentStage in {'Define Borders', 'Borders Set'}:
             print("Please restart script if you wish to redefine borders")
             return
         if self.currentStage == 'Harbors Set':
             self.removeHarbors()
         elif self.currentStage == 'Numbers Set':
             self.removeNumbers()
-        elif (self.currentStage == 'Resources Set') and ignoreResourcesSet:
-            self.currentStage = 'Borders Set'
+        elif self.currentStage == 'Resources Set':
+            if ignoreResourcesSet:
+                self.currentStage = 'Borders Set'
+            else:
+                self.removeResources()
         if draw: self.fig.canvas.draw()
     def redrawStage(self, draw=True):
         self.previousStage(True, False)
