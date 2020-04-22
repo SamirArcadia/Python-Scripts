@@ -12,6 +12,7 @@ from matplotlib.patches import Polygon, Rectangle, Circle
 from PIL import Image
 from shapely.geometry import box, Point
 from shapely.geometry.polygon import Polygon as Poly
+from sklearn.cluster import KMeans
 from descartes import PolygonPatch
 import gc
 import time
@@ -453,9 +454,17 @@ class Catan:
         self.currentStage = 'Borders Set'
         self.zoomGrid('border')
         if self.gameMode == 'systematic': self.assign_resButtons()
-    def clusterMethod(self, gameTiles):
+    def clusterMethod(self, gameTiles, hide, lR=15):
         # This is a stub, please edit.
-        landClusters = len(gameTiles) / 15 # use this as an approximate number of land clusters to place on board.
+        landClusters = int(np.round(len(gameTiles) / lR)) # use this as an approximate number of land clusters to place on board.
+        k = 3 # np.random.randint(landClusters-1, landClusters+2) # number of clusters randomly chosen.
+        centers = np.array([H.center for H in gameTiles])
+        kmeans = KMeans(k, 'random', 1)
+        labels = kmeans.fit_predict(centers)
+        resourceLabel = ['brick', 'water', 'sheep']
+        for i in range(len(gameTiles)): gameTiles[i].set_resource(resourceLabel[labels[i]])
+    def affinityMethod(self, gameTiles, hide):
+        for H in np.random.choice(gameTiles, len(gameTiles), False): H.pick_resource(hide)
     def setResources(self, hide=False):
         if self.currentStage not in {'Resources Set', 'Borders Set'}: raise AssertionError("Resources cannot be set in current state")
         self.close_resButtons()
@@ -464,7 +473,11 @@ class Catan:
         self.gameTiles = (self.Resources!='outside')*(self.Resources!='border')
         gameTiles = self[self.gameTiles]
         self.setupResourceLimit(len(gameTiles))
-        for H in np.random.choice(gameTiles, len(gameTiles), False): H.pick_resource(hide) # matrixAffinity algorithm
+        if self.resAlgorithm == 'affinityMatrix':
+            self.affinityMethod(gameTiles, hide)
+        else:
+            self.clusterMethod(gameTiles, hide)
+        #for H in np.random.choice(gameTiles, len(gameTiles), False): H.pick_resource(hide) # matrixAffinity algorithm
         self.currentStage = 'Resources Set'
     def removeResources(self):
         if self.currentStage != 'Resources Set': raise AssertionError("Resources cannot be removed in current state")
