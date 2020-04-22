@@ -96,19 +96,18 @@ class Button:
     def __init__(self, xy, gameboard, name, func, width=0.8, height=0.6, radio=False):
         self.gameboard = gameboard
         fcs = {'Reset':'lavender',  'Reveal':'lightyellow', 'Redraw':'lightcyan',     'Next':'lightgreen', 'Back':'antiquewhite', 'Radio':'lavender'}
-        ecs = {'Reset':'slategrey', 'Reveal':'olive',       'Redraw':'lightseagreen', 'Next':'darkgreen',  'Back':'olive',        'Radio':'none'}
+        ecs = {'Reset':'slategrey', 'Reveal':'olive',       'Redraw':'lightseagreen', 'Next':'darkgreen',  'Back':'olive',        'Radio':'orange'}
         tcs = {'Reset':'orangered', 'Reveal':'y',           'Redraw':'darkcyan',      'Next':'green',      'Back':'orange',       'Radio':'orange'}
         self.button_type = 'Radio' if radio else name
         if self.button_type not in fcs: self.button_type = 'Reset' # If an invalid name is entered then default to Reset.
         self.button_func = func
         self.active = False
         offsetx, offsety = width, height
-        self.button = Rectangle(xy, offsetx, offsety, fc=fcs[self.button_type], ec=ecs[self.button_type], alpha=0.8, zorder=2)
+        self.button = Rectangle(xy, offsetx, offsety, fc=fcs[self.button_type], ec=ecs[self.button_type], lw=0, alpha=0.8, zorder=2)
         self.gameboard.ax.add_patch(self.button)
         self.text = self.gameboard.ax.text(xy[0]+offsetx/2, xy[1]+offsety/2, name, fontsize=10, color=tcs[self.button_type], va='center', ha='center', zorder=3)
         self.cidpress = self.button.figure.canvas.mpl_connect('button_press_event', self.on_press)
-        if self.button_type == 'Radio':
-            self.cidmove = self.button.figure.canvas.mpl_connect('motion_notify_event', self.on_move)
+        self.cidmove = self.button.figure.canvas.mpl_connect('motion_notify_event', self.on_move)
     def on_press(self, event):
         if event.inaxes != self.button.axes: return
         contains, attrd = self.button.contains(event)
@@ -118,14 +117,18 @@ class Button:
         if event.inaxes != self.button.axes: return
         contains, attrd = self.button.contains(event)
         if contains and (not self.active):
-            self.button.set_edgecolor('orange')
             self.button.set_lw(2)
             self.active = True
             self.button.figure.canvas.draw()
         elif (not contains) and self.active: 
-            self.button.set_edgecolor('none')
+            self.button.set_lw(0)
             self.active = False
             self.button.figure.canvas.draw()
+    def remove(self):
+        self.button.figure.canvas.mpl_disconnect(self.cidpress)
+        self.button.figure.canvas.mpl_disconnect(self.cidmove)
+        self.button.remove()
+        self.text.remove()
 
 class RadioButton:
     def __init__(self, xy, gameboard, button_names, width=0.8, height=0.6, dy=-0.8, dx=0):
@@ -309,7 +312,7 @@ class hexTile:
         self.on_press(event)
         
 class Catan:
-    def __init__(self, gridsize=10, gameMode='complete', resourceRestriction='seafarers', numberRestriction=True,
+    def __init__(self, gridsize=10, gameMode='systematic', resourceRestriction='seafarers', numberRestriction=True,
                  perturbation=0, figsize=(12,10), clipEdges=True, paintedPixels=100, negativeForbids=False,
                  tokenTextSize=14, harborTextSize=8):
         self.gs, self.gp = gridsize, perturbation # store parameters
@@ -356,6 +359,11 @@ class Catan:
         return totalWater / total
     def set_resRestrict(self, resourceRestriction):
         self.resRestrict = resourceRestriction
+        self.setResources(self.hiddenActivated)
+        if (self.gameMode == 'complete') or (self.gameMode == 'hidden'):
+            self.setNumbers(self.hiddenActivated)
+            self.setHarbors(self.hiddenActivated)
+        self.fig.canvas.draw()
     def setupResourceLimit(self, total):
         if self.resRestrict:
             if self.resRestrict not in resRatios: raise AssertionError(f'The resource restriction parameter "{self.resRestrict}" is not understood.')
@@ -403,18 +411,27 @@ class Catan:
         ymax = np.max([border.center[1] for border in borders])
         restrictions = [key for key in resRatios] + ['None']
         self.resButtons = RadioButton((xmin,ymax), self, restrictions)
+    def close_resButtons(self):
+        if hasattr(self, 'resButtons'):
+            for button in self.resButtons.buttons: button.remove()
+            delattr(self, 'resButtons')
     def assign_buttons(self, width=0.9, height=0.6):
         self.buttons_assigned = True
         borders = self[self.Resources=='border']
         xmax = np.max([border.center[0] for border in borders])
         ymax = np.max([border.center[1] for border in borders])
-        self.reset_button = Button((xmax,ymax), self, 'Reset', self.resetBoard, width, height)
+        reset_button = Button((xmax,ymax), self, 'Reset', self.resetBoard, width, height)
         if self.gameMode == 'hidden':
-            self.reveal_button = Button((xmax,ymax-1.5*height), self, 'Reveal', self.revealAll, width, height)
+            reveal_button = Button((xmax,ymax-1.5*height), self, 'Reveal', self.revealAll, width, height)
+            self.optionButtons = [reset_button, reveal_button]
         else:
-            self.redraw_button = Button((xmax,ymax-1.5*height), self, 'Redraw', self.redrawStage, width, height)
-            self.next_button = Button((xmax,ymax-3*height), self, 'Next', self.nextStage, width, height)
-            self.back_button = Button((xmax,ymax-4.5*height), self, 'Back', self.previousStage, width, height)
+            redraw_button = Button((xmax,ymax-1.5*height), self, 'Redraw', self.redrawStage, width, height)
+            next_button = Button((xmax,ymax-3*height), self, 'Next', self.nextStage, width, height)
+            back_button = Button((xmax,ymax-4.5*height), self, 'Back', self.previousStage, width, height)
+            self.optionButtons = [reset_button, redraw_button, next_button, back_button]
+    def close_buttons(self):
+        for button in self.optionButtons: button.remove()
+        delattr(self, 'optionButtons')
     def update_isClosed(self):
         self.isClosed = False
         isBorder = self.Resources == 'soft border'
@@ -424,12 +441,8 @@ class Catan:
         self.isClosed = True
         self.deactivateMotion(None)
         for H in self[isBorder]: H.set_resource('border', False)
-        self.setBorders()
         self.hiddenActivated = True if self.gameMode == 'hidden' else False
-        if (self.gameMode == 'complete') or (self.gameMode == 'hidden'):
-            self.setResources(self.hiddenActivated)
-            self.setNumbers(self.hiddenActivated)
-            self.setHarbors(self.hiddenActivated)
+        self.setBorders()
         self.fig.canvas.draw()
     def setBorders(self):
         outsideSet = list(self[self.Resources == 'edge'])
@@ -446,8 +459,9 @@ class Catan:
         if self.gameMode == 'systematic': self.assign_resButtons()
     def setResources(self, hide=False):
         if self.currentStage not in {'Resources Set', 'Borders Set'}: raise AssertionError("Resources cannot be set in current state")
+        self.close_resButtons()
         if not self.buttons_assigned: self.assign_buttons()
-        self.numAffinityByRes = pd.DataFrame(np.zeros((len(numAffinity),6),dtype=int),columns=resAffinity.columns[4:],index=numAffinity.index)
+        self.numAffinityByRes = pd.DataFrame(np.zeros((len(numAffinity),6),dtype=int), columns=resAffinity.columns[4:], index=numAffinity.index)
         self.gameTiles = (self.Resources!='outside')*(self.Resources!='border')
         gameTiles = self[self.gameTiles]
         self.setupResourceLimit(len(gameTiles))
