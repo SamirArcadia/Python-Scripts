@@ -41,30 +41,30 @@ resRatios = {'standard' : {'water':0, 'desert':1, 'gold':0, 'brick':3, 'ore':3, 
              'pangea'   : {'water':0, 'desert':0, 'gold':1, 'brick':3, 'ore':3, 'wood':4, 'wheat':4, 'sheep':4},
              'seafarers' : {'water':20,'desert':1, 'gold':2, 'brick':4, 'ore':4, 'wood':4, 'wheat':4, 'sheep':5}}
 
-resAffinity = pd.DataFrame([[ 8,  1, 30, -4,  3,  0,  0,  0,  0,  0],
-                            [-2, -4, -6, -8,  0, -1, -1, -1, -1, -1],
+resAffinity = pd.DataFrame([[ 8,  1, 30,-99,  3,  0,  0,  0,  0,  0],
+                            [-2, -4,-99, -8,  0, -1, -1, -1, -1, -1],
                             [-2,  1,  0, -1,-12, -4, -4, -4, -4, -4],
-                            [ 1,  0,  0,  0, -2, -6,  0,  0,  0,  0],
-                            [ 1,  0,  0,  0, -2,  0, -6,  0,  0,  0],
-                            [ 1,  0,  0,  0, -2,  0,  0, -6,  0,  0],
-                            [ 1,  0,  0,  0, -2,  0,  0,  0, -6,  0],
-                            [ 1,  0,  0,  0, -2,  0,  0,  0,  0, -6]],
+                            [ 1,  0,  0,  0, -2,-99,  0,  0,  0,  0],
+                            [ 1,  0,  0,  0, -2,  0,-99,  0,  0,  0],
+                            [ 1,  0,  0,  0, -2,  0,  0,-99,  0,  0],
+                            [ 1,  0,  0,  0, -2,  0,  0,  0,-99,  0],
+                            [ 1,  0,  0,  0, -2,  0,  0,  0,  0,-99]],
                 index=['water','desert','gold','brick','ore','wood','wheat','sheep'],
                 columns=[None, 'border','water','desert','gold','brick','ore','wood','wheat','sheep'])
 
 resFiles = {'brick':'images\\brick.jpg','desert':'images\\desert.JPG','gold':'images\\gold.JPG','ore':'images\\ore.jpg',
             'sheep':'images\\sheep.jpg','water':'images\\water.JPG','wheat':'images\\wheat.jpg','wood':'images\\wood.JPG'}
 
-numAffinity = pd.DataFrame([[ 0,  0, -9,  1,  4,  9, 16, 16,  9,  4,  1,  0],
-                            [ 1,  1,  1, -9,  1,  4,  9,  9,  4,  1,  0,  1],
-                            [ 4,  4,  4,  1, -9,  1,  4,  4,  1,  0,  1,  4],
-                            [ 9,  1,  9,  4,  1, -9,  1,  1,  0,  1,  4,  9],
-                            [16,  0, 16,  9,  4,  1, -9,  0,  1,  4,  9, 16],
-                            [16,  0, 16,  9,  4,  1,  0, -9,  1,  4,  9, 16],
-                            [ 9,  1,  9,  4,  1,  0,  1,  1, -9,  1,  4,  9],
-                            [ 4,  4,  4,  1,  0,  1,  4,  4,  1, -9,  1,  4],
-                            [ 1,  1,  1,  0,  1,  4,  9,  9,  4,  1, -9,  1],
-                            [ 0,  0,  0,  1,  4,  9, 16, 16,  9,  4,  1, -9]],
+numAffinity = pd.DataFrame([[ 0,  0,-99,  1,  4,  9, 16, 16,  9,  4,  1,  0],
+                            [ 1,  1,  1,-99,  1,  4,  9,  9,  4,  1,  0,  1],
+                            [ 4,  4,  4,  1,-99,  1,  4,  4,  1,  0,  1,  4],
+                            [ 9,  1,  9,  4,  1,-99,  1,  1,  0,  1,  4,  9],
+                            [16,  0, 16,  9,  4,  1,-99,  0,  1,  4,  9, 16],
+                            [16,  0, 16,  9,  4,  1,  0,-99,  1,  4,  9, 16],
+                            [ 9,  1,  9,  4,  1,  0,  1,  1,-99,  1,  4,  9],
+                            [ 4,  4,  4,  1,  0,  1,  4,  4,  1,-99,  1,  4],
+                            [ 1,  1,  1,  0,  1,  4,  9,  9,  4,  1,-99,  1],
+                            [ 0,  0,  0,  1,  4,  9, 16, 16,  9,  4,  1,-99]],
                 index=[2, 3, 4, 5, 6, 8, 9, 10, 11, 12],
                 columns=[0, None, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12])
 
@@ -131,11 +131,10 @@ class Button:
         self.text.remove()
 
 class RadioButton:
-    def __init__(self, xy, gameboard, button_names, width=0.8, height=0.6, dy=-0.8, dx=0):
+    def __init__(self, xy, gameboard, button_names, button_funcs, width=0.8, height=0.6, dy=-0.8, dx=0):
         self.gameboard, self.buttons = gameboard, []
         for i in range(len(button_names)):
-            func = lambda: self.gameboard.set_resRestrict(False) if button_names[i]=='None' else self.gameboard.set_resRestrict(button_names[i])
-            self.buttons.append(Button((xy[0]+i*dx, xy[1]+i*dy), gameboard, button_names[i], func, width, height, True))
+            self.buttons.append(Button((xy[0]+i*dx, xy[1]+i*dy), gameboard, button_names[i], button_funcs[i], width, height, True))
 
 class hexTile:
     def __init__(self, x=0, y=0, perturbation=0):
@@ -328,7 +327,6 @@ class Catan:
                 self.Maxs[x,y] = np.max(self[x,y].vertices,0)
                 self.Mins[x,y] = np.min(self[x,y].vertices,0)
         self.paintedPixels = paintedPixels
-        self.initiate_resImages()
         self.isClosed = False
         self.motionActivated = False
         self.motionTouched = np.zeros(self.matrixSize, dtype=bool)
@@ -343,12 +341,6 @@ class Catan:
         self.tTS, self.hTS = tokenTextSize, harborTextSize
         self.currentStage = 'Define Borders' # goes in order of 'Define Borders', 'Borders Set', 'Resources Set', 'Numbers Set', 'Harbors Set'
         self.displayGrid(figsize, clipEdges)
-    def initiate_resImages(self, resFiles=resFiles):
-        self.resImages = {}
-        for resource, imageFile in resFiles.items():
-            PILimg = Image.open(imageFile)
-            zoomedPILimg = PILimg.resize((self.paintedPixels, self.paintedPixels))
-            self.resImages[resource] = zoomedPILimg.load()
     def __getitem__(self, xy):
         return self.grid[xy]
     def get_waterRatio(self):
@@ -410,7 +402,12 @@ class Catan:
         xmin = np.min([border.center[0] for border in borders]) - width/2
         ymax = np.max([border.center[1] for border in borders])
         restrictions = [key for key in resRatios] + ['None']
-        self.resButtons = RadioButton((xmin,ymax), self, restrictions)
+        def set_funcs(key):
+            def commit_funct():
+                self.set_resRestrict(key)
+            return commit_funct
+        functions = [set_funcs(key) for key in resRatios] + [set_funcs(False)]
+        self.resButtons = RadioButton((xmin,ymax), self, restrictions, functions)
     def close_resButtons(self):
         if hasattr(self, 'resButtons'):
             for button in self.resButtons.buttons: button.remove()
@@ -548,8 +545,13 @@ class Catan:
     def redrawStage(self, draw=True):
         self.previousStage(True, False)
         self.nextStage(draw)
-    def paintBoard(self):
+    def paintBoard(self, resFiles=resFiles):
         start = time.time()
+        self.resImages = {}
+        for resource, imageFile in resFiles.items():
+            PILimg = Image.open(imageFile)
+            zoomedPILimg = PILimg.resize((self.paintedPixels, self.paintedPixels))
+            self.resImages[resource] = zoomedPILimg.load()
         for H in self[self.gameTiles]: H.paintResource()
         print(f"Took {(time.time()-start)/60} minutes to paint board")
      
