@@ -7,11 +7,13 @@ Created on Mon Apr 13 18:20:44 2020
 
 import numpy as np
 import pandas as pd
+from copy import deepcopy as dc
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon, Rectangle, Circle
 from PIL import Image
 from shapely.geometry import box, Point
 from shapely.geometry.polygon import Polygon as Poly
+from sklearn.preprocessing import normalize
 from sklearn.cluster import KMeans
 from descartes import PolygonPatch
 import gc
@@ -53,6 +55,11 @@ resAffinity = pd.DataFrame([[ 8,  1, 30, -4,  3,  0,  0,  0,  0,  0],
                 index=['water','desert','gold','brick','ore','wood','wheat','sheep'],
                 columns=[None, 'border','water','desert','gold','brick','ore','wood','wheat','sheep'])
 
+landTiles = ['brick', 'ore', 'wood', 'wheat', 'sheep', 'gold', 'desert']
+baseProbs = [ 3/17  ,  3/17,  3/17 ,  3/17  ,  3/17  ,  1/17 ,  1/17   ]
+landTilesSet = {landTiles[i]:i for i in range(len(landTiles))}
+land2waterRatio = 0.6
+
 resFiles = {'brick':'images\\brick.jpg','desert':'images\\desert.JPG','gold':'images\\gold.JPG','ore':'images\\ore.jpg',
             'sheep':'images\\sheep.jpg','water':'images\\water.JPG','wheat':'images\\wheat.jpg','wood':'images\\wood.JPG'}
 
@@ -92,6 +99,15 @@ def rand_from_cdf(cdf):
     randomNumber, chosenIndex = np.random.randint(1, np.max(cdf)+1), 0
     while randomNumber > cdf.iloc[chosenIndex]: chosenIndex += 1
     return cdf.index[chosenIndex]
+
+def rand_from_pdf(pdf):
+    cdf = [0]
+    for i in range(len(pdf)): cdf.append(cdf[-1]+pdf[i])
+    p = np.random.rand()*cdf[-1] # pick random number between 0 and max of cdf
+    choice = 0
+    while p > cdf[choice+1]:
+        choice += 1
+    return choice
 
 class Button:
     def __init__(self, xy, gameboard, name, func, width=0.8, height=0.6, radio=False):
@@ -147,7 +163,7 @@ class hexTile:
         self.patch = Polygon(self.vertices, linewidth=0.5, fc='none', ec='gray', alpha=0.5, zorder=0)
         self.x, self.y = x, y
         self.resource, self.number, self.harbor, self.gameboard = None, None, None, None
-        self.harborFaces, self.facedByHarbor, self.polygon, self.paintedPatches = None, set(), None, []
+        self.harborFaces, self.facedByHarbor, self.clusterLabel, self.polygon, self.paintedPatches = None, set(), None, None, []
     def __eq__(self, other):
         if isinstance(other, hexTile): return (self.x, self.y) == (other.x, other.y)
         return False
@@ -219,6 +235,7 @@ class hexTile:
             self.set_number(hexColors[resource]['num'])
         else:
             self.set_patchParams(draw, **hexColors[resource])
+        if hide: self.coordText.set_visible(True)
     def set_number(self, number, hide=False):
         self.gameboard.Numbers[self.x, self.y] = number
         self.number = number
@@ -273,7 +290,24 @@ class hexTile:
     def pick_resource(self, hide=False):
         self.removePaintedResource()
         self.set_resource(self.pick_fromDF(resAffinity, 'resource'), False, hide)
-        if hide: self.coordText.set_visible(True)
+    def pick_resource_byCluster(self, cluster_i, hide=False):
+        if (self.gameboard.clusterLandRem[cluster_i] == 0) or (self.clusterLabel != cluster_i) or (self not in self.gameboard.gameTilesRemaining): return
+        self.removePaintedResource()
+        neighbors = list(self.neighbors)
+        baseProbability = dc(baseProbs)
+        for neighbor in neighbors:
+            if neighbor.resource in landTilesSet:
+                baseProbability[landTilesSet[neighbor.resource]] = baseProbability[landTilesSet[neighbor.resource]] ** 2
+        if self.gameboard.resRestrict:
+            for resource, value in self.gameboard.allowedRes.items():
+                if value <= 0:
+                    baseProbability[landTilesSet[resource]] = 0
+        if np.sum(baseProbability) == 0: return
+        resource = landTiles[rand_from_pdf(baseProbability)]
+        if self.gameboard.resRestrict:
+            self.gameboard.allowedRes[resource] -= 1
+        self.set_resource(resource, False, hide)
+        self.gameboard.resAssignQueue += neighbors
     def pick_number(self, hide=False):
         self.set_number(self.pick_fromDF(numAffinity, 'number'), hide)
     def reveal(self, draw=True):
@@ -311,7 +345,7 @@ class hexTile:
         self.on_press(event)
         
 class Catan:
-    def __init__(self, gridsize=10, gameMode='systematic', resAlgorithm='affinityMatrix', numberRestriction=True,
+    def __init__(self, gridsize=10, gameMode='systematic', resAlgorithm='clusterMethod', numberRestriction=True,
                  perturbation=0, figsize=(12,10), clipEdges=True, paintedPixels=100, negativeForbids=False,
                  tokenTextSize=14, harborTextSize=8):
         self.gs, self.gp = gridsize, perturbation # store parameters
@@ -334,6 +368,7 @@ class Catan:
         self.hiddenRevealed = set()
         self.buttons_assigned = False
         self.radioButtons_assigned = False
+        self.gameTilesRemaining = set()
         self.Resources = np.empty(self.matrixSize, dtype=object)
         self.Numbers = np.empty(self.matrixSize, dtype=object)
         self.TilesWithHarbor = []
@@ -455,16 +490,47 @@ class Catan:
         self.zoomGrid('border')
         if self.gameMode == 'systematic': self.assign_resButtons()
     def clusterMethod(self, gameTiles, hide, lR=15):
-        # This is a stub, please edit.
+        self.gameTilesRemaining = set(gameTiles)
+        for H in gameTiles:
+            H.set_resource('water', False, self.hiddenActivated)
         landClusters = int(np.round(len(gameTiles) / lR)) # use this as an approximate number of land clusters to place on board.
-        k = 3 # np.random.randint(landClusters-1, landClusters+2) # number of clusters randomly chosen.
+        minLandMasses = max([1, landClusters - 1])
+        maxLandMasses = max([minLandMasses, landClusters + 5])
+        k = np.random.randint(minLandMasses, maxLandMasses) # number of clusters randomly chosen.
         centers = np.array([H.center for H in gameTiles])
-        kmeans = KMeans(k, 'random', 1)
-        labels = kmeans.fit_predict(centers)
-        resourceLabel = ['brick', 'water', 'sheep']
-        for i in range(len(gameTiles)): gameTiles[i].set_resource(resourceLabel[labels[i]])
+        kmeans = KMeans(k, 'random', n_init=1)
+        clusterLabels = kmeans.fit_predict(centers)
+        for i in range(len(clusterLabels)): gameTiles[i].clusterLabel = clusterLabels[i]
+        if self.resRestrict == False:
+            totalLandTiles = int(len(gameTiles)*land2waterRatio)
+        else:
+            totalLandTiles = 0
+            for landTile in landTiles: totalLandTiles += self.allowedRes[landTile]
+        self.clusterLandRem, self.clusterCenters, cluster_i = {i:0 for i in range(k)}, {}, 0
+        while totalLandTiles > 0:
+            if cluster_i >= k: cluster_i = 0
+            self.clusterLandRem[cluster_i] += 1
+            cluster_i += 1
+            totalLandTiles -= 1
+        for cluster_i in range(k): 
+            self.resAssignQueue = [gameTiles[np.argmin(normalize(centers - kmeans.cluster_centers_[cluster_i], return_norm=True)[1])]] # get center hex of cluster
+            while len(self.resAssignQueue) > 0:
+                H = self.resAssignQueue.pop(0)
+                if H in self.gameTilesRemaining:
+                    H.pick_resource_byCluster(cluster_i, self.hiddenActivated)
+                    self.gameTilesRemaining.remove(H)
+                    self.clusterLandRem[cluster_i] -= 1
+        #lastRemaining = list(self.gameTilesRemaining)
+        #for H in lastRemaining:
+        #    H.set_resource('water', False, self.hiddenActivated)
+        #    self.gameTilesRemaining.remove(H)
+        #resourceLabel = ['brick', 'water', 'sheep', 'desert', 'wood', 'wheat', 'gold']
+        #for i in range(len(gameTiles)): gameTiles[i].set_resource(resourceLabel[self.clusterLabels[i]])
     def affinityMethod(self, gameTiles, hide):
-        for H in np.random.choice(gameTiles, len(gameTiles), False): H.pick_resource(hide)
+        self.gameTilesRemaining = set(gameTiles)
+        for H in np.random.choice(gameTiles, len(gameTiles), False): 
+            H.pick_resource(hide)
+            self.gameTilesRemaining.remove(H)
     def setResources(self, hide=False):
         if self.currentStage not in {'Resources Set', 'Borders Set'}: raise AssertionError("Resources cannot be set in current state")
         self.close_resButtons()
