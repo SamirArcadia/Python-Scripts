@@ -302,7 +302,7 @@ class hexTile:
                 baseProbability[landTilesSet[neighbor.resource]] = baseProbability[landTilesSet[neighbor.resource]] ** 2
         if self.gameboard.resRestrict:
             for resource, value in self.gameboard.allowedRes.items():
-                if value <= 0:
+                if (value <= 0) and (resource != 'water'):
                     baseProbability[landTilesSet[resource]] = 0
         if np.sum(baseProbability) == 0: return
         resource = landTiles[rand_from_pdf(baseProbability)]
@@ -518,7 +518,7 @@ class Catan:
         self.resAssignQueue = {cluster_i: [gameTiles[np.argmin(normalize(centers - kmeans.cluster_centers_[cluster_i], return_norm=True)[1])]] for cluster_i in range(k)} # centers
         while TLT > 0:
             for cluster_i in range(k):
-                if self.clusterLandRem[cluster_i] > 0:
+                if (self.clusterLandRem[cluster_i]>0) and (len(self.resAssignQueue[cluster_i])>0):
                     H = self.resAssignQueue[cluster_i].pop(0)
                     if H in self.gameTilesRemaining:
                         H.pick_resource_byCluster(cluster_i, self.hiddenActivated)
