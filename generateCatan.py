@@ -58,23 +58,23 @@ resAffinity = pd.DataFrame([[ 8,  1, 30, -4,  3,  0,  0,  0,  0,  0],
 landTiles = ['brick', 'ore', 'wood', 'wheat', 'sheep', 'gold', 'desert']
 baseProbs = [ 3/17  ,  3/17,  3/17 ,  3/17  ,  3/17  ,  1/17 ,  1/17   ]
 landTilesSet = {landTiles[i]:i for i in range(len(landTiles))}
-land2waterRatio = 0.6
+land2waterRatio = 0.5
 
 resFiles = {'brick':'images\\brick.jpg','desert':'images\\desert.JPG','gold':'images\\gold.JPG','ore':'images\\ore.jpg',
             'sheep':'images\\sheep.jpg','water':'images\\water.JPG','wheat':'images\\wheat.jpg','wood':'images\\wood.JPG'}
 
-numAffinity = pd.DataFrame([[ 0,  0,-99,  1,  4,  9, 16, 16,  9,  4,  1,  0],
-                            [ 1,  1,  1,-99,  1,  4,  9,  9,  4,  1,  0,  1],
-                            [ 4,  4,  4,  1,-99,  1,  4,  4,  1,  0,  1,  4],
-                            [ 9,  1,  9,  4,  1,-99,  1,  1,  0,  1,  4,  9],
-                            [16,  0, 16,  9,  4,  1,-99,  0,  1,  4,  9, 16],
-                            [16,  0, 16,  9,  4,  1,  0,-99,  1,  4,  9, 16],
-                            [ 9,  1,  9,  4,  1,  0,  1,  1,-99,  1,  4,  9],
-                            [ 4,  4,  4,  1,  0,  1,  4,  4,  1,-99,  1,  4],
-                            [ 1,  1,  1,  0,  1,  4,  9,  9,  4,  1,-99,  1],
-                            [ 0,  0,  0,  1,  4,  9, 16, 16,  9,  4,  1,-99]],
+numAffinity = pd.DataFrame([[ 0,  0,  9,-99,  1,  4,  9, 16, 16,  9,  4,  1,  0],
+                            [ 1,  1, 16,  1,-99,  1,  4,  9,  9,  4,  1,  0,  1],
+                            [ 4,  4,  9,  4,  1,-99,  1,  4,  4,  1,  0,  1,  4],
+                            [ 9,  1,  0,  9,  4,  1,-99,  1,  1,  0,  1,  4,  9],
+                            [16,  0,-99, 16,  9,  4,  1,-99,  0,  1,  4,  9, 16],
+                            [16,  0,-99, 16,  9,  4,  1,  0,-99,  1,  4,  9, 16],
+                            [ 9,  1,  0,  9,  4,  1,  0,  1,  1,-99,  1,  4,  9],
+                            [ 4,  4,  9,  4,  1,  0,  1,  4,  4,  1,-99,  1,  4],
+                            [ 1,  1, 16,  1,  0,  1,  4,  9,  9,  4,  1,-99,  1],
+                            [ 0,  0,  9,  0,  1,  4,  9, 16, 16,  9,  4,  1,-99]],
                 index=[2, 3, 4, 5, 6, 8, 9, 10, 11, 12],
-                columns=[0, None, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12])
+                columns=[0, None, 'gold', 2, 3, 4, 5, 6, 8, 9, 10, 11, 12])
 
 harborRatio = ['Any\n3:1','Any\n3:1','Any\n3:1','Any\n3:1','Wood\n2:1','Brick\n2:1','Sheep\n2:1','Wheat\n2:1','Ore\n2:1']
 
@@ -101,12 +101,10 @@ def rand_from_cdf(cdf):
     return cdf.index[chosenIndex]
 
 def rand_from_pdf(pdf):
-    cdf = [0]
+    cdf, choice = [0], 0
     for i in range(len(pdf)): cdf.append(cdf[-1]+pdf[i])
     p = np.random.rand()*cdf[-1] # pick random number between 0 and max of cdf
-    choice = 0
-    while p > cdf[choice+1]:
-        choice += 1
+    while p > cdf[choice+1]: choice += 1
     return choice
 
 class Button:
@@ -274,10 +272,14 @@ class hexTile:
     def pick_fromDF(self, DF, attr):
         pdf = np.zeros((len(DF),),dtype=int)
         for H in self.neighbors: pdf += DF[getattr(H, attr)] # gets pdf
-        if attr == 'number': pdf += self.gameboard.numAffinityByRes[self.resource] # Also take into account how prevelent the resource is
+        if attr == 'number': 
+            if self.resource != 'gold':
+                pdf += self.gameboard.numAffinityByRes[self.resource] # Also take into account how prevelent the resource is
+            else:
+                pdf += numAffinity['gold']
         shiftedpdf = pdf + (1 - np.min(pdf))
         cdf = shiftedpdf.cumsum()
-        if self.gameboard.negForbids and not np.all(pdf < 0): cdf[pdf < 0] = 0 # This means negative pdf value forbids affinity
+        if self.gameboard.negForbids and not np.all(pdf < 0): cdf[pdf < 0] = 0 # This means negative pdf value forbids affinity -- this is currently broken!
         choice = rand_from_cdf(cdf)
         if ((attr=='number') and (not self.gameboard.numRestrict)) or ((attr=='resource') and (not self.gameboard.resRestrict)): return choice
         if attr=='number':
@@ -307,7 +309,7 @@ class hexTile:
         if self.gameboard.resRestrict:
             self.gameboard.allowedRes[resource] -= 1
         self.set_resource(resource, False, hide)
-        self.gameboard.resAssignQueue += neighbors
+        self.gameboard.resAssignQueue[cluster_i] += neighbors
     def pick_number(self, hide=False):
         self.set_number(self.pick_fromDF(numAffinity, 'number'), hide)
     def reveal(self, draw=True):
@@ -475,6 +477,7 @@ class Catan:
         for H in self[isBorder]: H.set_resource('border', False)
         self.hiddenActivated = True if self.gameMode == 'hidden' else False
         self.setBorders()
+        self.assign_resButtons()
         self.fig.canvas.draw()
     def setBorders(self):
         outsideSet = list(self[self.Resources == 'edge'])
@@ -488,44 +491,61 @@ class Catan:
                     outsideSet.append(neighbor)
         self.currentStage = 'Borders Set'
         self.zoomGrid('border')
-        if self.gameMode == 'systematic': self.assign_resButtons()
     def clusterMethod(self, gameTiles, hide, lR=15):
         self.gameTilesRemaining = set(gameTiles)
-        for H in gameTiles:
-            H.set_resource('water', False, self.hiddenActivated)
+        for H in gameTiles: H.set_resource('water', False, self.hiddenActivated)
         landClusters = int(np.round(len(gameTiles) / lR)) # use this as an approximate number of land clusters to place on board.
         minLandMasses = max([1, landClusters - 1])
-        maxLandMasses = max([minLandMasses, landClusters + 5])
+        maxLandMasses = min([max([minLandMasses, landClusters + 2]), len(gameTiles)])
         k = np.random.randint(minLandMasses, maxLandMasses) # number of clusters randomly chosen.
         centers = np.array([H.center for H in gameTiles])
+        centers_full = np.concatenate((centers, np.array([H.center for H in self[self.Resources=='border']])), 0)
         kmeans = KMeans(k, 'random', n_init=1)
-        clusterLabels = kmeans.fit_predict(centers)
+        kmeans.fit(centers_full)
+        clusterLabels = kmeans.predict(centers)
         for i in range(len(clusterLabels)): gameTiles[i].clusterLabel = clusterLabels[i]
         if self.resRestrict == False:
             totalLandTiles = int(len(gameTiles)*land2waterRatio)
         else:
             totalLandTiles = 0
             for landTile in landTiles: totalLandTiles += self.allowedRes[landTile]
-        self.clusterLandRem, self.clusterCenters, cluster_i = {i:0 for i in range(k)}, {}, 0
+        self.clusterLandRem, self.clusterCenters, cluster_i, TLT = {i:0 for i in range(k)}, {}, 0, totalLandTiles-k
         while totalLandTiles > 0:
             if cluster_i >= k: cluster_i = 0
             self.clusterLandRem[cluster_i] += 1
             cluster_i += 1
             totalLandTiles -= 1
-        for cluster_i in range(k): 
-            self.resAssignQueue = [gameTiles[np.argmin(normalize(centers - kmeans.cluster_centers_[cluster_i], return_norm=True)[1])]] # get center hex of cluster
-            while len(self.resAssignQueue) > 0:
-                H = self.resAssignQueue.pop(0)
-                if H in self.gameTilesRemaining:
-                    H.pick_resource_byCluster(cluster_i, self.hiddenActivated)
-                    self.gameTilesRemaining.remove(H)
-                    self.clusterLandRem[cluster_i] -= 1
-        #lastRemaining = list(self.gameTilesRemaining)
-        #for H in lastRemaining:
-        #    H.set_resource('water', False, self.hiddenActivated)
-        #    self.gameTilesRemaining.remove(H)
-        #resourceLabel = ['brick', 'water', 'sheep', 'desert', 'wood', 'wheat', 'gold']
-        #for i in range(len(gameTiles)): gameTiles[i].set_resource(resourceLabel[self.clusterLabels[i]])
+        self.resAssignQueue = {cluster_i: [gameTiles[np.argmin(normalize(centers - kmeans.cluster_centers_[cluster_i], return_norm=True)[1])]] for cluster_i in range(k)} # centers
+        while TLT > 0:
+            for cluster_i in range(k):
+                if self.clusterLandRem[cluster_i] > 0:
+                    H = self.resAssignQueue[cluster_i].pop(0)
+                    if H in self.gameTilesRemaining:
+                        H.pick_resource_byCluster(cluster_i, self.hiddenActivated)
+                        self.gameTilesRemaining.remove(H)
+                        self.clusterLandRem[cluster_i] -= 1
+                        TLT -= 1
+        # pick k random tiles to spread however!
+        potentialExtras, remainder = [], []
+        if self.resRestrict!=False:
+            for landTile in landTiles:
+                if self.allowedRes[landTile] > 0:
+                    remainder += [landTile]*self.allowedRes[landTile]
+            remainder = list(np.random.choice(remainder, len(remainder), False))
+        for H in self.gameTilesRemaining:
+            x, y = self.Neighbors[H.x, H.y]
+            neighborResources = self.Resources[x, y]
+            nonLand = np.sum((neighborResources=='water')+(neighborResources=='border'))
+            if nonLand >= 6: 
+                potentialExtras.append(H)
+                if (len(potentialExtras) >= k) and (self.resRestrict==False): break
+        for H in potentialExtras:
+            if self.resRestrict==False:
+                H.pick_resource_byCluster(H.clusterLabel, self.hiddenActivated)
+            else:
+                if len(remainder) == 0: break
+                H.set_resource(remainder.pop(), False, self.hiddenActivated)
+        self.gameTilesRemaining = set()
     def affinityMethod(self, gameTiles, hide):
         self.gameTilesRemaining = set(gameTiles)
         for H in np.random.choice(gameTiles, len(gameTiles), False): 
