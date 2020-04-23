@@ -515,6 +515,12 @@ class Catan:
             self.clusterLandRem[cluster_i] += 1
             cluster_i += 1
             totalLandTiles -= 1
+        for cluster_i in range(k):
+            added, order, seen, cluster_size = set(), [], set(), np.sum(clusterLabels == cluster_i)
+            H = gameTiles[np.argmin(normalize(centers - kmeans.cluster_centers_[cluster_i], return_norm=True)[1])]
+            added.add(H)
+            order.append(H)
+            seen.add(H)
         self.resAssignQueue = {cluster_i: [gameTiles[np.argmin(normalize(centers - kmeans.cluster_centers_[cluster_i], return_norm=True)[1])]] for cluster_i in range(k)} # centers
         while TLT > 0:
             for cluster_i in range(k):
