@@ -309,7 +309,7 @@ class hexTile:
         if self.gameboard.resRestrict:
             self.gameboard.allowedRes[resource] -= 1
         self.set_resource(resource, False, hide)
-        self.gameboard.resAssignQueue[cluster_i] += neighbors
+        #self.gameboard.resAssignQueue[cluster_i] += neighbors
     def pick_number(self, hide=False):
         self.set_number(self.pick_fromDF(numAffinity, 'number'), hide)
     def reveal(self, draw=True):
@@ -515,22 +515,41 @@ class Catan:
             self.clusterLandRem[cluster_i] += 1
             cluster_i += 1
             totalLandTiles -= 1
+        Orders = []
         for cluster_i in range(k):
-            added, order, seen, cluster_size = set(), [], set(), np.sum(clusterLabels == cluster_i)
-            H = gameTiles[np.argmin(normalize(centers - kmeans.cluster_centers_[cluster_i], return_norm=True)[1])]
-            added.add(H)
-            order.append(H)
-            seen.add(H)
-        self.resAssignQueue = {cluster_i: [gameTiles[np.argmin(normalize(centers - kmeans.cluster_centers_[cluster_i], return_norm=True)[1])]] for cluster_i in range(k)} # centers
+            order, seen, cluster_size = [], set(), np.sum(clusterLabels == cluster_i)
+            Q = [gameTiles[np.argmin(normalize(centers - kmeans.cluster_centers_[cluster_i], return_norm=True)[1])]]
+            order.append(Q[0])
+            seen.add(Q[0])
+            while len(order) < cluster_size:
+                H = Q.pop(0)
+                neighbors = np.random.choice(list(H.neighbors), len(H.neighbors), False)
+                for nH in neighbors:
+                    if nH in seen: continue
+                    seen.add(nH)
+                    if nH.clusterLabel != cluster_i: continue
+                    order.append(nH)
+                    Q.append(nH)
+            Orders.append(order)
+        indexes = [-1 for cluster_i in range(k)]
         while TLT > 0:
             for cluster_i in range(k):
-                if (self.clusterLandRem[cluster_i]>0) and (len(self.resAssignQueue[cluster_i])>0):
-                    H = self.resAssignQueue[cluster_i].pop(0)
-                    if H in self.gameTilesRemaining:
-                        H.pick_resource_byCluster(cluster_i, self.hiddenActivated)
-                        self.gameTilesRemaining.remove(H)
-                        self.clusterLandRem[cluster_i] -= 1
-                        TLT -= 1
+                indexes[cluster_i] += 1
+                H = Orders[cluster_i][indexes[cluster_i]]
+                H.pick_resource_byCluster(cluster_i, self.hiddenActivated)
+                self.gameTilesRemaining.remove(H)
+                self.clusterLandRem[cluster_i] -= 1
+                TLT -= 1
+#        self.resAssignQueue = {cluster_i: [gameTiles[np.argmin(normalize(centers - kmeans.cluster_centers_[cluster_i], return_norm=True)[1])]] for cluster_i in range(k)} # centers
+#        while TLT > 0:
+#            for cluster_i in range(k):
+#                if (self.clusterLandRem[cluster_i]>0) and (len(self.resAssignQueue[cluster_i])>0):
+#                    H = self.resAssignQueue[cluster_i].pop(0)
+#                    if H in self.gameTilesRemaining:
+#                        H.pick_resource_byCluster(cluster_i, self.hiddenActivated)
+#                        self.gameTilesRemaining.remove(H)
+#                        self.clusterLandRem[cluster_i] -= 1
+#                        TLT -= 1
         # pick k random tiles to spread however!
         potentialExtras, remainder = [], []
         if self.resRestrict!=False:
