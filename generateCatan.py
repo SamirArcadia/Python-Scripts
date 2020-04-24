@@ -56,7 +56,7 @@ resAffinity = pd.DataFrame([[ 8,  1, 30, -4,  3,  0,  0,  0,  0,  0],
                 columns=[None, 'border','water','desert','gold','brick','ore','wood','wheat','sheep'])
 
 landTiles = ['brick', 'ore', 'wood', 'wheat', 'sheep', 'gold', 'desert']
-baseProbs = [ 3/17  ,  3/17,  3/17 ,  3/17  ,  3/17  ,  1/17 ,  1/17   ]
+baseProbs = [ 3/17  ,  3/17,  3/17 ,  3/17  ,  3/17  ,  0 ,  0   ]
 landTilesSet = {landTiles[i]:i for i in range(len(landTiles))}
 land2waterRatio = 0.5
 
@@ -110,9 +110,9 @@ def rand_from_pdf(pdf):
 class Button:
     def __init__(self, xy, gameboard, name, func, width=0.8, height=0.6, radio=False):
         self.gameboard = gameboard
-        fcs = {'Reset':'lavender',  'Reveal':'lightyellow', 'Redraw':'lightcyan',     'Next':'lightgreen', 'Back':'antiquewhite', 'Radio':'lavender'}
-        ecs = {'Reset':'slategrey', 'Reveal':'olive',       'Redraw':'lightseagreen', 'Next':'darkgreen',  'Back':'olive',        'Radio':'orange'}
-        tcs = {'Reset':'orangered', 'Reveal':'y',           'Redraw':'darkcyan',      'Next':'green',      'Back':'orange',       'Radio':'orange'}
+        fcs = {'Reset':'lavender',  'Reveal':'lightyellow', 'Continent':'lightgoldenrodyellow', 'Redraw':'lightcyan',     'Next':'lightgreen', 'Back':'antiquewhite', 'Radio':'lavender'}
+        ecs = {'Reset':'slategrey', 'Reveal':'olive',       'Continent':'olive'               , 'Redraw':'lightseagreen', 'Next':'darkgreen',  'Back':'olive',        'Radio':'orange'}
+        tcs = {'Reset':'orangered', 'Reveal':'y',           'Continent':'olivedrab'           , 'Redraw':'darkcyan',      'Next':'green',      'Back':'orange',       'Radio':'orange'}
         self.button_type = 'Radio' if radio else name
         if self.button_type not in fcs: self.button_type = 'Reset' # If an invalid name is entered then default to Reset.
         self.button_func = func
@@ -312,6 +312,9 @@ class hexTile:
         #self.gameboard.resAssignQueue[cluster_i] += neighbors
     def pick_number(self, hide=False):
         self.set_number(self.pick_fromDF(numAffinity, 'number'), hide)
+    def pick_number_byCluster(self, hide=False):
+        # this function is currently a stub.
+        pass
     def reveal(self, draw=True):
         if self.gameboard.hiddenActivated and (self not in self.gameboard.hiddenRevealed) and (self.resource not in {'border','outside'}):
             self.gameboard.hiddenRevealed.add(self)
@@ -347,7 +350,7 @@ class hexTile:
         self.on_press(event)
         
 class Catan:
-    def __init__(self, gridsize=10, gameMode='systematic', resAlgorithm='clusterMethod', numberRestriction=True,
+    def __init__(self, gridsize=10, gameMode='hidden', resAlgorithm='clusterMethod', numberRestriction=True,
                  perturbation=0, figsize=(12,10), clipEdges=True, paintedPixels=100, negativeForbids=False,
                  tokenTextSize=14, harborTextSize=8):
         self.gs, self.gp = gridsize, perturbation # store parameters
@@ -457,7 +460,8 @@ class Catan:
         reset_button = Button((xmax,ymax), self, 'Reset', self.resetBoard, width, height)
         if self.gameMode == 'hidden':
             reveal_button = Button((xmax,ymax-1.5*height), self, 'Reveal', self.revealAll, width, height)
-            self.optionButtons = [reset_button, reveal_button]
+            continent_button = Button((xmax,ymax-3*height), self, 'Continent', self.revealContinent, width, height)
+            self.optionButtons = [reset_button, reveal_button, continent_button]
         else:
             redraw_button = Button((xmax,ymax-1.5*height), self, 'Redraw', self.redrawStage, width, height)
             next_button = Button((xmax,ymax-3*height), self, 'Next', self.nextStage, width, height)
@@ -495,8 +499,8 @@ class Catan:
         self.gameTilesRemaining = set(gameTiles)
         for H in gameTiles: H.set_resource('water', False, self.hiddenActivated)
         landClusters = int(np.round(len(gameTiles) / lR)) # use this as an approximate number of land clusters to place on board.
-        minLandMasses = max([1, landClusters - 1])
-        maxLandMasses = min([max([minLandMasses, landClusters + 2]), len(gameTiles)])
+        minLandMasses = max([1, landClusters])
+        maxLandMasses = min([max([minLandMasses, landClusters + 3]), len(gameTiles)])
         k = np.random.randint(minLandMasses, maxLandMasses) # number of clusters randomly chosen.
         centers = np.array([H.center for H in gameTiles])
         centers_full = np.concatenate((centers, np.array([H.center for H in self[self.Resources=='border']])), 0)
@@ -519,6 +523,7 @@ class Catan:
         for cluster_i in range(k):
             order, seen, cluster_size = [], set(), np.sum(clusterLabels == cluster_i)
             Q = [gameTiles[np.argmin(normalize(centers - kmeans.cluster_centers_[cluster_i], return_norm=True)[1])]]
+            self.clusterCenters[cluster_i] = Q[0]
             order.append(Q[0])
             seen.add(Q[0])
             while len(order) < cluster_size:
@@ -557,6 +562,7 @@ class Catan:
                 if self.allowedRes[landTile] > 0:
                     remainder += [landTile]*self.allowedRes[landTile]
             remainder = list(np.random.choice(remainder, len(remainder), False))
+        print(k, remainder)
         for H in self.gameTilesRemaining:
             x, y = self.Neighbors[H.x, H.y]
             neighborResources = self.Resources[x, y]
@@ -571,6 +577,7 @@ class Catan:
                 if len(remainder) == 0: break
                 H.set_resource(remainder.pop(), False, self.hiddenActivated)
         self.gameTilesRemaining = set()
+        self.k = k
     def affinityMethod(self, gameTiles, hide):
         self.gameTilesRemaining = set(gameTiles)
         for H in np.random.choice(gameTiles, len(gameTiles), False): 
@@ -648,6 +655,12 @@ class Catan:
     def revealAll(self, draw=True):
         if self.currentStage != 'Harbors Set': raise AssertionError("Gameboard appears incomplete")
         for H in self[self.gameTiles]: H.reveal(draw=False)
+        if draw: self.fig.canvas.draw()
+    def revealContinent(self, continent=None, draw=True):
+        if self.hiddenActivated == False: return
+        if continent is None: continent = np.random.choice(np.arange(self.k))
+        for H in self[self.gameTiles]:
+            if H.clusterLabel==continent: H.reveal(draw=False)
         if draw: self.fig.canvas.draw()
     def nextStage(self, draw=True):
         if self.currentStage == 'Define Borders':
