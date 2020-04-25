@@ -59,6 +59,10 @@ landTiles = ['brick', 'ore', 'wood', 'wheat', 'sheep', 'gold', 'desert']
 baseProbs = [ 3/17  ,  3/17,  3/17 ,  3/17  ,  3/17  ,  0 ,  0   ]
 landTilesSet = {landTiles[i]:i for i in range(len(landTiles))}
 land2waterRatio = 0.5
+numTokens = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12]
+numProbs = np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+numTokensSet = {numTokens[i]:i for i in range(len(numTokens))}
+numWeight = {2:1,3:2,4:3,5:4,6:5,8:5,9:4,10:3,11:2,12:1}
 
 resFiles = {'brick':'images\\brick.jpg','desert':'images\\desert.JPG','gold':'images\\gold.JPG','ore':'images\\ore.jpg',
             'sheep':'images\\sheep.jpg','water':'images\\water.JPG','wheat':'images\\wheat.jpg','wood':'images\\wood.JPG'}
@@ -160,7 +164,7 @@ class hexTile:
         self.vertices = np.array([[self.center[0]+np.cos(t), self.center[1]+np.sin(t)] for t in thetas])
         self.patch = Polygon(self.vertices, linewidth=0.5, fc='none', ec='gray', alpha=0.5, zorder=0)
         self.x, self.y = x, y
-        self.resource, self.number, self.harbor, self.gameboard = None, None, None, None
+        self.resource, self.number, self.harbor, self.gameboard, self.extraIsland = None, None, None, None, False
         self.harborFaces, self.facedByHarbor, self.clusterLabel, self.polygon, self.paintedPatches = None, set(), None, None, []
     def __eq__(self, other):
         if isinstance(other, hexTile): return (self.x, self.y) == (other.x, other.y)
@@ -226,6 +230,7 @@ class hexTile:
             options[key](value)
         if draw: self.patch.figure.canvas.draw()
     def set_resource(self, resource, draw=True, hide=False):
+        if resource is None: self.extraIsland = False
         self.gameboard.Resources[self.x, self.y] = resource
         self.resource = resource
         if resource not in hexColors: raise KeyError(f"Unrecognized Resource: {resource}")
@@ -309,12 +314,28 @@ class hexTile:
         if self.gameboard.resRestrict:
             self.gameboard.allowedRes[resource] -= 1
         self.set_resource(resource, False, hide)
-        #self.gameboard.resAssignQueue[cluster_i] += neighbors
     def pick_number(self, hide=False):
         self.set_number(self.pick_fromDF(numAffinity, 'number'), hide)
-    def pick_number_byCluster(self, hide=False):
-        # this function is currently a stub.
-        pass
+    def pick_number_byPDF(self, hide=False):
+        pdf = dc(numProbs)
+        for neighbor in self.neighbors:
+            if (neighbor.number is None) or (neighbor.number==0): continue
+            rank = numWeight[neighbor.number]
+            if rank != 3:
+                # These calculations cancel eath other out in the case when number is 4 or 10.
+                pdf[rank-1] **= 2
+                pdf[-rank] **= 2
+                opposite_rank = 6 - rank
+                pdf[opposite_rank-1] **= 0.5
+                pdf[-opposite_rank] **= 0.5
+            pdf[numTokensSet[neighbor.number]] **= 2
+        if self.gameboard.numRestrict:
+            for number, value in self.gameboard.allowedNum.items():
+                if value <= 0: pdf[numTokensSet[number]] = 0
+        if np.sum(pdf) == 0: pdf = dc(numProbs)
+        number = numTokens[rand_from_pdf(pdf)]
+        if self.gameboard.numRestrict: self.gameboard.allowedNum[number] -= 1
+        self.set_number(number, hide)
     def reveal(self, draw=True):
         if self.gameboard.hiddenActivated and (self not in self.gameboard.hiddenRevealed) and (self.resource not in {'border','outside'}):
             self.gameboard.hiddenRevealed.add(self)
@@ -367,12 +388,9 @@ class Catan:
                 self.Mins[x,y] = np.min(self[x,y].vertices,0)
         self.paintedPixels = paintedPixels
         self.isClosed = False
-        self.motionActivated = False
-        self.motionTouched = np.zeros(self.matrixSize, dtype=bool)
-        self.hiddenActivated = False
-        self.hiddenRevealed = set()
-        self.buttons_assigned = False
-        self.radioButtons_assigned = False
+        self.motionActivated, self.motionTouched = False, np.zeros(self.matrixSize, dtype=bool)
+        self.hiddenActivated, self.hiddenRevealed, self.unRevealedContinents = False, set(), set()
+        self.buttons_assigned, self.radioButtons_assigned = False, False
         self.gameTilesRemaining = set()
         self.Resources = np.empty(self.matrixSize, dtype=object)
         self.Numbers = np.empty(self.matrixSize, dtype=object)
@@ -500,7 +518,7 @@ class Catan:
         for H in gameTiles: H.set_resource('water', False, self.hiddenActivated)
         landClusters = int(np.round(len(gameTiles) / lR)) # use this as an approximate number of land clusters to place on board.
         minLandMasses = max([1, landClusters])
-        maxLandMasses = min([max([minLandMasses, landClusters + 3]), len(gameTiles)])
+        maxLandMasses = max([1, min([max([minLandMasses, landClusters + 2]), len(gameTiles)])])
         k = np.random.randint(minLandMasses, maxLandMasses) # number of clusters randomly chosen.
         centers = np.array([H.center for H in gameTiles])
         centers_full = np.concatenate((centers, np.array([H.center for H in self[self.Resources=='border']])), 0)
@@ -545,16 +563,6 @@ class Catan:
                 self.gameTilesRemaining.remove(H)
                 self.clusterLandRem[cluster_i] -= 1
                 TLT -= 1
-#        self.resAssignQueue = {cluster_i: [gameTiles[np.argmin(normalize(centers - kmeans.cluster_centers_[cluster_i], return_norm=True)[1])]] for cluster_i in range(k)} # centers
-#        while TLT > 0:
-#            for cluster_i in range(k):
-#                if (self.clusterLandRem[cluster_i]>0) and (len(self.resAssignQueue[cluster_i])>0):
-#                    H = self.resAssignQueue[cluster_i].pop(0)
-#                    if H in self.gameTilesRemaining:
-#                        H.pick_resource_byCluster(cluster_i, self.hiddenActivated)
-#                        self.gameTilesRemaining.remove(H)
-#                        self.clusterLandRem[cluster_i] -= 1
-#                        TLT -= 1
         # pick k random tiles to spread however!
         potentialExtras, remainder = [], []
         if self.resRestrict!=False:
@@ -562,13 +570,13 @@ class Catan:
                 if self.allowedRes[landTile] > 0:
                     remainder += [landTile]*self.allowedRes[landTile]
             remainder = list(np.random.choice(remainder, len(remainder), False))
-        print(k, remainder)
         for H in self.gameTilesRemaining:
             x, y = self.Neighbors[H.x, H.y]
             neighborResources = self.Resources[x, y]
             nonLand = np.sum((neighborResources=='water')+(neighborResources=='border'))
-            if nonLand >= 6: 
+            if nonLand >= 6:
                 potentialExtras.append(H)
+                H.extraIsland = True
                 if (len(potentialExtras) >= k) and (self.resRestrict==False): break
         for H in potentialExtras:
             if self.resRestrict==False:
@@ -577,7 +585,8 @@ class Catan:
                 if len(remainder) == 0: break
                 H.set_resource(remainder.pop(), False, self.hiddenActivated)
         self.gameTilesRemaining = set()
-        self.k = k
+        self.continents = k
+        self.unRevealedContinents = list(np.random.choice(range(k), k, False))
     def affinityMethod(self, gameTiles, hide):
         self.gameTilesRemaining = set(gameTiles)
         for H in np.random.choice(gameTiles, len(gameTiles), False): 
@@ -600,6 +609,7 @@ class Catan:
     def removeResources(self):
         if self.currentStage != 'Resources Set': raise AssertionError("Resources cannot be removed in current state")
         for H in self[self.gameTiles]: H.set_resource(None, False)
+        self.unRevealedContinents = set()
         self.close_buttons()
         self.buttons_assigned = False
         self.assign_resButtons()
@@ -609,7 +619,10 @@ class Catan:
         self.numberableTiles = self.gameTiles * (self.Numbers==None)
         numberableTiles = self[self.numberableTiles]
         self.setupNumberLimit(len(numberableTiles))
-        for H in np.random.choice(numberableTiles, len(numberableTiles), False): H.pick_number(hide)
+        if self.resAlgorithm == 'clusterMethod': 
+            for H in np.random.choice(numberableTiles, len(numberableTiles), False): H.pick_number_byPDF(hide)
+        else:
+            for H in np.random.choice(numberableTiles, len(numberableTiles), False): H.pick_number(hide)
         self.currentStage = 'Numbers Set'
     def removeNumbers(self):
         if self.currentStage != 'Numbers Set': raise AssertionError("Numbers cannot be removed in current state")
@@ -657,10 +670,10 @@ class Catan:
         for H in self[self.gameTiles]: H.reveal(draw=False)
         if draw: self.fig.canvas.draw()
     def revealContinent(self, continent=None, draw=True):
-        if self.hiddenActivated == False: return
-        if continent is None: continent = np.random.choice(np.arange(self.k))
+        if (self.hiddenActivated == False) or (len(self.unRevealedContinents) == 0): return
+        if continent is None: continent = self.unRevealedContinents.pop()
         for H in self[self.gameTiles]:
-            if H.clusterLabel==continent: H.reveal(draw=False)
+            if (H.clusterLabel==continent) and (not H.extraIsland): H.reveal(draw=False)
         if draw: self.fig.canvas.draw()
     def nextStage(self, draw=True):
         if self.currentStage == 'Define Borders':
