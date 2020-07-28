@@ -11,11 +11,11 @@ from copy import deepcopy as dc
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon, Rectangle, Circle
 from PIL import Image
-from shapely.geometry import box, Point
-from shapely.geometry.polygon import Polygon as Poly
+#from shapely.geometry import box, Point
+#from shapely.geometry.polygon import Polygon as Poly
 from sklearn.preprocessing import normalize
 from sklearn.cluster import KMeans
-from descartes import PolygonPatch
+#from descartes import PolygonPatch
 import gc
 import time
 
